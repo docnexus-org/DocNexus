@@ -723,35 +723,45 @@
             saveBtn.disabled = true;
 
             const newPath = workspaceInput.value.trim();
-            if (!newPath) return;
+            if (!newPath) {
+                saveBtn.innerHTML = originalText;
+                saveBtn.disabled = false;
+                return;
+            }
 
             try {
                 // First ensure it's in the list (add if needed)
-                await fetch('/api/workspaces', {
+                console.log("Adding workspace:", newPath);
+                const addResponse = await fetch('/api/workspaces', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ path: newPath })
                 });
 
-                // Then set as active
-                const response = await fetch('/api/workspaces/active', {
+                const addData = await addResponse.json();
+
+                if (!addResponse.ok) {
+                    throw new Error(addData.error || 'Failed to add workspace');
+                }
+
+                // If add successful, set as active
+                console.log("Setting active workspace:", newPath);
+                const activeResponse = await fetch('/api/workspaces/active', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ path: newPath })
                 });
 
-                const data = await response.json();
+                const activeData = await activeResponse.json();
 
-                if (data.success) {
+                if (activeData.success) {
                     window.location.reload();
                 } else {
-                    alert('Error: ' + (data.error || 'Failed to update workspace'));
-                    saveBtn.innerHTML = originalText;
-                    saveBtn.disabled = false;
+                    throw new Error(activeData.error || 'Failed to set active workspace');
                 }
             } catch (err) {
                 console.error(err);
-                alert('Network error occurred');
+                alert('Error: ' + err.message);
                 saveBtn.innerHTML = originalText;
                 saveBtn.disabled = false;
             }
