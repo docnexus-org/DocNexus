@@ -2,13 +2,20 @@
 
 All notable changes to this project will be documented in this file.
 
-## [v1.1.2] - 2025-12-28
+## [v1.1.2] - 2025-12-29
+
 ### Added
+- **Sidebar Table of Contents**: Added a dynamic, sticky Table of Contents on the View page with nested indentation and scroll-spy highlighting.
 - **Configurable Workspace**: New settings UI to change the active workspace folder directly from the application.
 - **Documentation Access**: Added direct link to documentation in the header.
 - **Multi-page Documentation Browser**: New sidebar navigation allows browsing all documentation files directly within the application.
 
+### Changed
+- **UI Standardization**: Unified the styling of Theme Toggle, "Back to Hub" buttons, and Icons across Index, Docs, and View pages.
+
 ### Fixed
+- **View Page Edit/Save**: Fixed the "Edit" button selector and rectified backend save logic to support nested document paths.
+- **Build System**: Resolved `python-dotenv` build warnings and cleaned up root directory clutter.
 - **Workspace Configuration**: Fixed path resolution issues that caused "Workspace not configured" errors.
 - **Documentation Link**: Fixed 404 error by correctly routing to the `docs` directory.
 - **Port Conflict**: Improved startup reliability by handling previous instances.
