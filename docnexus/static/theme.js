@@ -4,14 +4,17 @@ const ThemeManager = {
         const savedTheme = localStorage.getItem('theme') || 'light';
         this.setTheme(savedTheme);
 
-        // Attach click handlers if element exists
-        const btn = document.querySelector('.theme-toggle');
-        if (btn) {
-            btn.addEventListener('click', () => this.toggle());
-        }
+        // Attach click handlers (Event Delegation for robustness)
+        document.addEventListener('click', (e) => {
+            const toggle = e.target.closest('#themeToggle');
+            if (toggle) {
+                this.toggle();
+            }
+        });
     },
 
     toggle() {
+        console.log('Theme toggle triggered');
         const current = document.documentElement.getAttribute('data-theme');
         const next = current === 'dark' ? 'light' : 'dark';
         this.setTheme(next);
@@ -21,16 +24,20 @@ const ThemeManager = {
         document.documentElement.setAttribute('data-theme', theme);
         localStorage.setItem('theme', theme);
 
-        // Update Icon
-        const icon = document.getElementById('themeIcon');
-        if (icon) {
-            if (icon.classList.contains('bi')) {
-                // Class-based (Bootstrap Icons)
-                icon.className = theme === 'dark' ? 'bi bi-sun-fill' : 'bi bi-moon-stars-fill';
-                icon.textContent = '';
-            } else {
-                // Text-based (Legacy/Emoji)
-                icon.textContent = theme === 'dark' ? '☀️' : '🌙';
+        // Update Slider UI
+        const toggle = document.getElementById('themeToggle');
+        if (toggle) {
+            toggle.setAttribute('data-value', theme);
+            const left = toggle.querySelector('.toggle-option.left');
+            const right = toggle.querySelector('.toggle-option.right');
+            if (left && right) {
+                if (theme === 'light') {
+                    left.classList.add('active');
+                    right.classList.remove('active');
+                } else {
+                    left.classList.remove('active');
+                    right.classList.add('active');
+                }
             }
         }
 

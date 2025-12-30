@@ -619,6 +619,15 @@
         .toggle-switch[data-value="left"] .toggle-slider {
             transform: translateX(0%);
         }
+
+        /* Theme Slider Specific */
+        .toggle-switch[data-value="dark"] .toggle-slider {
+            transform: translateX(100%);
+        }
+
+        .toggle-switch[data-value="light"] .toggle-slider {
+            transform: translateX(0%);
+        }
     </style>
 </head>
 
@@ -656,11 +665,12 @@
                     <div class="settings-item">
                         <span class="settings-label">Appearance</span>
                         <!-- Theme Toggle (Embedded) -->
-                        <button class="btn-icon"
-                            style="width: 32px; height: 32px; border: none; background: transparent;"
-                            onclick="ThemeManager.toggle()">
-                            <i class="bi bi-moon-stars-fill" id="themeIcon"></i>
-                        </button>
+                        <!-- Theme Slider -->
+                        <div class="toggle-switch" id="themeToggle">
+                            <div class="toggle-slider"></div>
+                            <div class="toggle-option left">Light</div>
+                            <div class="toggle-option right">Dark</div>
+                        </div>
                     </div>
 
                     <div class="settings-item">

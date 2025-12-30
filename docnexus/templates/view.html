@@ -542,7 +542,7 @@
             color: var(--color-accent-primary);
         }
 
-        /* Settings Dropdown (Reuse styles mostly) */
+        /* Settings Dropdown (Uniform with index.html) */
         .settings-dropdown {
             position: relative;
         }
@@ -556,7 +556,8 @@
             background: var(--color-surface);
             border: 1px solid var(--color-border-default);
             border-radius: var(--radius-md);
-            box-shadow: var(--shadow-lg);
+            box-shadow: 0 10px 40px -10px rgba(0, 0, 0, 0.5);
+            /* Soft shadow from index */
             min-width: 220px;
             z-index: 1000;
             padding: 12px;
@@ -564,6 +565,19 @@
 
         .settings-menu.show {
             display: block;
+            animation: fadeIn 0.2s ease;
+        }
+
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+                transform: translateY(5px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
         }
 
         .settings-item {
@@ -583,10 +597,11 @@
             font-weight: 500;
         }
 
-        /* Toggle Switch */
+        /* Toggle Switch (Uniform) */
         .toggle-switch {
             display: flex;
-            background: var(--color-bg-secondary);
+            background: rgba(0, 0, 0, 0.2);
+            /* Index style */
             border-radius: 20px;
             padding: 2px;
             cursor: pointer;
@@ -616,7 +631,8 @@
             height: calc(100% - 4px);
             background: var(--color-surface);
             border-radius: 16px;
-            box-shadow: var(--shadow-sm);
+            box-shadow: 0 0 20px rgba(99, 102, 241, 0.15);
+            /* Glow from index */
             transition: transform 0.2s ease;
         }
 
@@ -626,6 +642,24 @@
 
         .toggle-switch[data-value="left"] .toggle-slider {
             transform: translateX(0);
+        }
+
+        /* Theme Slider Specific */
+        .toggle-switch[data-value="dark"] .toggle-slider {
+            transform: translateX(100%);
+        }
+
+        .toggle-switch[data-value="light"] .toggle-slider {
+            transform: translateX(0%);
+        }
+
+        /* Theme Slider Specific */
+        .toggle-switch[data-value="dark"] .toggle-slider {
+            transform: translateX(100%);
+        }
+
+        .toggle-switch[data-value="light"] .toggle-slider {
+            transform: translateX(0%);
         }
 
         /* TOC Positioning Logic */
@@ -761,12 +795,12 @@
                     <div class="settings-menu" id="settingsMenu">
                         <div class="settings-item">
                             <span class="settings-label">Appearance</span>
-                            <!-- Theme Toggle -->
-                            <button class="theme-toggle" aria-label="Toggle theme"
-                                style="border: none; background: transparent; padding: 0; cursor: pointer;"
-                                onclick="ThemeManager.toggle()">
-                                <i class="bi bi-moon-stars-fill" id="themeIcon"></i>
-                            </button>
+                            <!-- Theme Slider -->
+                            <div class="toggle-switch" id="themeToggle">
+                                <div class="toggle-slider"></div>
+                                <div class="toggle-option left">Light</div>
+                                <div class="toggle-option right">Dark</div>
+                            </div>
                         </div>
                         <div class="settings-item">
                             <span class="settings-label">TOC Position</span>
@@ -1080,10 +1114,6 @@
         document.addEventListener('DOMContentLoaded', () => {
             const storedPos = localStorage.getItem('tocPosition') || 'right';
             setTocPosition(storedPos);
-
-            const t = localStorage.getItem('theme') || 'light';
-            const icon = document.getElementById('themeIcon');
-            if (icon) icon.className = t === 'dark' ? 'bi bi-sun-fill' : 'bi bi-moon-stars-fill';
         });
 
         function exportToPDF() {
