@@ -233,17 +233,7 @@
             height: 16px;
         }
 
-        .version-badge {
-            display: inline-flex;
-            align-items: center;
-            gap: var(--space-1);
-            padding: 4px 12px;
-            background: linear-gradient(135deg, var(--color-accent-primary), #7c3aed);
-            color: white;
-            border-radius: 20px;
-            font-size: var(--font-size-xs);
-            font-weight: 600;
-        }
+
 
         .theme-toggle {
             background: transparent;
@@ -665,14 +655,7 @@
                     </svg>
                     Back to Hub
                 </a>
-                <span class="version-badge">
-                    <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor">
-                        <path d="M8 0a8 8 0 1 1 0 16A8 8 0 0 1 8 0zM1.5 8a6.5 6.5 0 1 0 13 0 6.5 6.5 0 0 0-13 0z" />
-                        <path
-                            d="M8 4a.5.5 0 0 1 .5.5v3h3a.5.5 0 0 1 0 1h-3v3a.5.5 0 0 1-1 0v-3h-3a.5.5 0 0 1 0-1h3v-3A.5.5 0 0 1 8 4z" />
-                    </svg>
-                    v{{ doc.version }}
-                </span>
+                <span class="brand-version">v{{ doc.version }}</span>
             </div>
 
             <!-- Standardized Settings Menu -->

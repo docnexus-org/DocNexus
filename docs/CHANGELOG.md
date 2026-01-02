@@ -20,6 +20,9 @@ All notable changes to this project will be documented in this file.
 - **Build System**: Added auto-kill logic to terminate previous instances before building.
 - **Build System**: Added `--log` flag to capture build output to `build/build.log`.
 - **UI**: Fixed visibility issue for "Save Changes" button in Workspace Settings (Light Mode).
+- **UI**: Fixed text cursor appearing on static elements (enabled native-app feel).
+- **UI**: Standardized version badge style on Documentation page.
+- **core**: Fixed version fallback logic to correctly display v1.2.0 in compiled builds.
 
 
 

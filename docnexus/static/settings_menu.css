@@ -31,6 +31,7 @@
 .settings-dropdown {
     position: relative;
     display: inline-block;
+    cursor: default;
     /* Ensure it behaves well in any container */
 }
 
@@ -51,6 +52,7 @@
     text-decoration: none;
     padding: 0;
     outline: none;
+    user-select: none;
 }
 
 .settings-trigger:hover {
@@ -116,6 +118,7 @@
 .settings-label {
     font-weight: 500;
     white-space: nowrap;
+    user-select: none;
 }
 
 /* Toggle Switch */
@@ -132,6 +135,7 @@
     /* Fill the grid cell */
     height: 32px;
     /* Fixed height */
+    user-select: none;
 }
 
 .toggle-option {

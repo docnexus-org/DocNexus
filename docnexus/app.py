@@ -78,7 +78,7 @@ try:
     VERSION = __version__
 except ImportError:
     # Fallback if running directly
-    VERSION = '1.0.1'
+    VERSION = '1.2.0'
 
 app = Flask(__name__, static_folder='static')
 app.config['TEMPLATES_AUTO_RELOAD'] = True

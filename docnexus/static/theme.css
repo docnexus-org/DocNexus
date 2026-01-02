@@ -128,6 +128,26 @@ body {
     min-height: 100vh;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
+    cursor: default;
+    /* Prevent text cursor by default */
+    user-select: none;
+    /* Globally prevent selection */
+}
+
+/* Ensure inputs still have text cursor and selection */
+input,
+textarea,
+[contenteditable] {
+    cursor: text;
+    user-select: text;
+}
+
+/* Allow selecting content in the document view */
+.markdown-content,
+.document-title,
+.document-path {
+    user-select: text;
+    cursor: auto;
 }
 
 /* Components - Buttons */
@@ -145,6 +165,8 @@ body {
     cursor: pointer;
     text-decoration: none;
     transition: all 0.2s ease;
+    user-select: none;
+    /* Prevent text selection */
 }
 
 .btn:hover {
@@ -180,6 +202,7 @@ body {
     font-size: var(--font-size-sm);
     color: var(--color-text-secondary);
     transition: all 0.2s ease;
+    user-select: none;
 }
 
 .theme-toggle:hover {
@@ -202,6 +225,7 @@ body {
     font-weight: 600;
     transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
     box-shadow: var(--shadow-sm);
+    user-select: none;
 }
 
 .back-link:hover {
@@ -243,6 +267,7 @@ body {
     font-size: 1.1rem;
     padding: 0;
     text-decoration: none;
+    user-select: none;
 }
 
 .btn-icon:hover {
@@ -279,6 +304,7 @@ header {
     align-items: center;
     gap: 1rem;
     text-decoration: none;
+    user-select: none;
 }
 
 .brand-logo {
