@@ -2,7 +2,7 @@
 
 All notable changes to this project will be documented in this file.
 
-## [v1.1.2] - 2025-12-29
+## [v1.1.2] - 2026-01-02
 
 ### Added
 - **Sidebar Table of Contents**: Added a dynamic, sticky Table of Contents on the View page with nested indentation and scroll-spy highlighting.
@@ -17,6 +17,9 @@ All notable changes to this project will be documented in this file.
 - **UI Standardization**: Unified the styling of Theme Toggle, "Back to Hub" buttons, and Icons across Index, Docs, and View pages.
 - **Sidebar Improvements**: Refined Table of Contents with visual hierarchy (tree lines, indentation), direction-aware styling, and a sleek, custom scrollbar.
 - **Settings Menu Layout**: Enforced 'Outfit' font and Grid layout for the Settings Menu to ensure pixel-perfect consistency and alignment across all pages.
+- **Top Button Revamp**: Transformed "Go to Top" button into a cleaner, circular glassmorphic FAB (42x42px) with FontAwesome arrow icon.
+- **Edit Logic**: Improved UX by allowing the "Edit" button to toggle/cancel the editor if clicked while the editor is already open.
+- **Icon Standardization**: Migrated remaining view-page icons to FontAwesome (`fas`) to ensuring uniform style and weight across the application.
 
 
 ### Fixed
@@ -29,6 +32,8 @@ All notable changes to this project will be documented in this file.
 - **Code Hygiene**: Removed unused Modal CSS and standardized theme toggle implementation across all pages to eliminate warnings.
 - **TOC Logic**: Fixed critical bug where TOC position toggle failed on `docs.html` due to conflicting default classes.
 - **Visual Alignment**: Resolved spacing and alignment discrepancies in settings submenu toggles.
+- **Export Functionality**: Fixed broken PDF/Word export actions in `view.html` by correcting ID selectors and updating icons.
+- **JS Stability**: Fixed critical JavaScript syntax error in `view.html` that caused interactive buttons (Edit, Top, Export) to fail.
 
 ## [v1.0.1] - 2025-12-28
 
