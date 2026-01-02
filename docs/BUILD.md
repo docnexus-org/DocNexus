@@ -1,58 +1,61 @@
 # Build System Documentation
 
-DocNexus uses a PowerShell-based build system (`make.ps1`) to handle dependencies, environment setup, and compilation.
+DocNexus uses a **cross-platform build system** centered around Python. This ensures that builds are consistent whether you are on Windows, Linux, or macOS.
+
+> **Architecture**: All logic resides in `scripts/build.py`. 
+> *   **Windows**: The `make.ps1` script wraps this Python logic.
+> *   **Linux/Mac**: The `Makefile` wraps this Python logic.
+
+---
+
+## 🚀 Quick Start
+
+| OS | Command | Description |
+| :--- | :--- | :--- |
+| **Windows** | `.\make.ps1 setup` | Setup venv and deps |
+| **Linux/Mac** | `make setup` | Setup venv and deps |
+
+### Building the App
+To create a standalone executable:
+
+**Windows**:
+```powershell
+.\make.ps1 build
+```
+
+**Linux / Mac**:
+```bash
+make build
+```
+The output file will be in `build/output/`.
+
+---
 
 ## The "Dual-Mode" Build System
-The build system detects whether the proprietary `plugins_dev` directory is present and adjusts accordingly:
+The build system automatically detects if you have the proprietary source code:
 1.  **Open Source Mode**: Default. Builds the Core engine only.
-2.  **Mixed Mode**: If `docnexus/plugins_dev` exists (as a folder or symlink), it is bundled into the final executable.
-
-> **Note**: This allows a single codebase to produce both the OSS Community Edition and the Premium Enterprise Edition.
+2.  **Premium Mode**: If `docnexus/plugins_dev` exists, it is bundled into the final executable.
 
 ---
 
-## Prerequisites
-*   Windows 10/11
-*   Python 3.10+
-*   PowerShell 5.0+
+## Advanced Usage
 
-## Quick Commands
-All commands are run via `.\make.ps1` in the project root.
+### Clean Artifacts
+Remove all build caches, temporary files, and output binaries.
+*   **Windows**: `.\make.ps1 clean`
+*   **Linux**: `make clean`
 
-| Command | Description |
-| :--- | :--- |
-| `.\make.ps1 setup` | Creates `build/venv` and installs dependencies. Run this first. |
-| `.\make.ps1 build` | Compiles the standalone `.exe` using PyInstaller. |
-| `.\make.ps1 start` | Runs the compiled executable (if exists). |
-| `.\make.ps1 run` | Runs the application from source (Development Mode). |
-| `.\make.ps1 clean` | Removes build artifacts (`dist/`, `build/`). |
-| `.\make.ps1 clean-all` | Removes everything including `venv`. (Factory Reset). |
+### Run from Source
+Run the application directly without packaging.
+*   **Windows**: `.\make.ps1 run`
+*   **Linux**: `make run`
 
 ---
-
-## Detailed Build Process
-
-### 1. Setup (`make.ps1 setup`)
-*   Checks for Python installation.
-*   Creates a virtual environment at `build/venv`.
-*   Upgrades `pip` and installs requirements from `setup.py`.
-
-### 2. Compilation (`make.ps1 build`)
-*   Uses **PyInstaller** to package the app into a single file.
-*   **Artifact Path**: `build/output/DocNexus_vX.X.X.exe`.
-*   **Plugins Dev**: Checks for `docnexus/plugins_dev`. If found:
-    *   Adds the directory to PyInstaller's data paths.
-    *   Uses a runtime hook (`build/hook-docnexus.plugins_dev.py`) to force-include all Python submodules in that directory.
-
-### 3. Release (`make.ps1 release`)
-*   Runs a `build`.
-*   Zips the executable along with `docs/` and `LICENSE`.
-*   Places the zip in `build/output/release/`.
 
 ## Troubleshooting
 
-**"PyInstaller not found"**
-*   Run `.\make.ps1 setup` again to repair the environment.
+**"Venv not found"**
+*   Run `make setup` (or `.\make.ps1 setup`) first.
 
-**"ImportError: No module named docnexus.plugins_dev"**
-*   This is expected in **Open Source Mode**. The code handles this gracefully using `try/except` blocks in the loader.
+**"Permission Denied" (Linux)**
+*   Ensure `scripts/build.py` is executable: `chmod +x scripts/build.py`.
