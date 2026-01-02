@@ -1,160 +1,58 @@
-# Production Build Instructions - DocNexus v1.0.0
+# Build System Documentation
+
+DocNexus uses a PowerShell-based build system (`make.ps1`) to handle dependencies, environment setup, and compilation.
+
+## The "Dual-Mode" Build System
+The build system detects whether the proprietary `plugins_dev` directory is present and adjusts accordingly:
+1.  **Open Source Mode**: Default. Builds the Core engine only.
+2.  **Mixed Mode**: If `docnexus/plugins_dev` exists (as a folder or symlink), it is bundled into the final executable.
+
+> **Note**: This allows a single codebase to produce both the OSS Community Edition and the Premium Enterprise Edition.
+
+---
 
 ## Prerequisites
+*   Windows 10/11
+*   Python 3.10+
+*   PowerShell 5.0+
 
-Install PyInstaller:
-```bash
-pip install pyinstaller
-```
+## Quick Commands
+All commands are run via `.\make.ps1` in the project root.
 
-## Build Executable
+| Command | Description |
+| :--- | :--- |
+| `.\make.ps1 setup` | Creates `build/venv` and installs dependencies. Run this first. |
+| `.\make.ps1 build` | Compiles the standalone `.exe` using PyInstaller. |
+| `.\make.ps1 start` | Runs the compiled executable (if exists). |
+| `.\make.ps1 run` | Runs the application from source (Development Mode). |
+| `.\make.ps1 clean` | Removes build artifacts (`dist/`, `build/`). |
+| `.\make.ps1 clean-all` | Removes everything including `venv`. (Factory Reset). |
 
-### Option 1: Using Spec File (Recommended)
-```bash
-pyinstaller DocNexus.spec
-```
+---
 
-### Option 2: Direct Build
-```bash
-pyinstaller --onefile --name DocNexus --add-data "doc_viewer/templates;doc_viewer/templates" --add-data "examples;examples" --add-data "docs;docs" --hidden-import flask --hidden-import markdown run.py
-```
+## Detailed Build Process
 
-## Output
+### 1. Setup (`make.ps1 setup`)
+*   Checks for Python installation.
+*   Creates a virtual environment at `build/venv`.
+*   Upgrades `pip` and installs requirements from `setup.py`.
 
-The executable will be created in:
-- `dist/DocNexus.exe` (Windows)
-- `dist/DocNexus` (Linux/Mac)
+### 2. Compilation (`make.ps1 build`)
+*   Uses **PyInstaller** to package the app into a single file.
+*   **Artifact Path**: `build/output/DocNexus_vX.X.X.exe`.
+*   **Plugins Dev**: Checks for `docnexus/plugins_dev`. If found:
+    *   Adds the directory to PyInstaller's data paths.
+    *   Uses a runtime hook (`build/hook-docnexus.plugins_dev.py`) to force-include all Python submodules in that directory.
 
-## Distribution Package
-
-Create a distribution folder with:
-```
-DocNexus-v1.0.0/
-├── DocNexus.exe          # Main executable
-├── workspace/              # Sample markdown files
-│   └── (your .md files)
-├── README.md               # Documentation
-└── LICENSE.txt             # License file
-```
-
-## Usage
-
-### End Users
-1. Extract the DocNexus-v1.0.0.zip
-2. Add your .md files to the `workspace/` folder
-3. Run `DocNexus.exe`
-4. Browser opens at http://localhost:8000
-
-### Command Line Options
-```bash
-# Start with default settings
-DocNexus.exe
-
-# Custom port
-DocNexus.exe --port 8080
-
-# Custom host and port
-DocNexus.exe --host 0.0.0.0 --port 8080
-
-# Debug mode
-DocNexus.exe --debug
-```
-
-## Testing the Executable
-
-1. Build the executable
-2. Copy it to a clean directory
-3. Create a `workspace` folder (copy contents from `examples/`)
-4. Run the executable
-5. Verify all features work correctly
+### 3. Release (`make.ps1 release`)
+*   Runs a `build`.
+*   Zips the executable along with `docs/` and `LICENSE`.
+*   Places the zip in `build/output/release/`.
 
 ## Troubleshooting
 
-### Missing Templates Error
-If you get "Template not found" errors, ensure the spec file includes:
-```python
-datas = [
-    ('doc_viewer/templates', 'doc_viewer/templates'),
-    ...
-]
-```
+**"PyInstaller not found"**
+*   Run `.\make.ps1 setup` again to repair the environment.
 
-### Missing Markdown Extensions
-If rendering fails, add missing extensions to `hiddenimports` in the spec file.
-
-### Large Executable Size
-The executable includes Python runtime and all dependencies (~30-50 MB). This is normal for PyInstaller builds.
-
-To reduce size:
-- Remove unused markdown extensions
-- Exclude development dependencies
-- Use UPX compression (enabled by default)
-
-## Version Info
-
-To create a Windows version info file:
-
-1. Create `version_info.txt`:
-```
-VSVersionInfo(
-  ffi=FixedFileInfo(
-    filevers=(1, 0, 0, 0),
-    prodvers=(1, 0, 0, 0),
-    mask=0x3f,
-    flags=0x0,
-    OS=0x40004,
-    fileType=0x1,
-    subtype=0x0,
-    date=(0, 0)
-  ),
-  kids=[
-    StringFileInfo(
-      [
-      StringTable(
-        u'040904B0',
-        [StringStruct(u'CompanyName', u'Your Company'),
-        StringStruct(u'FileDescription', u'DocNexus - Executive Documentation Platform'),
-        StringStruct(u'FileVersion', u'1.0.0'),
-        StringStruct(u'InternalName', u'DocNexus'),
-        StringStruct(u'LegalCopyright', u'Copyright (c) 2025'),
-        StringStruct(u'OriginalFilename', u'DocNexus.exe'),
-        StringStruct(u'ProductName', u'DocNexus'),
-        StringStruct(u'ProductVersion', u'1.0.0')])
-      ]
-    ),
-    VarFileInfo([VarStruct(u'Translation', [1033, 1200])])
-  ]
-)
-```
-
-2. Update spec file:
-```python
-exe = EXE(
-    ...
-    version_file='version_info.txt',
-    icon='icon.ico',  # Optional
-)
-```
-
-## Distribution Checklist
-
-- [ ] Test executable on clean Windows machine
-- [ ] Verify all markdown rendering works
-- [ ] Test smart conversion toggle
-- [ ] Check theme switching
-- [ ] Verify file browser and navigation
-- [ ] Test with various document types
-- [ ] Include README.md with usage instructions
-- [ ] Include sample markdown files
-- [ ] Add LICENSE.txt file
-- [ ] Create version-tagged release (v1.0.0)
-- [ ] Generate SHA256 checksums for security
-
-## Release Artifacts
-
-Create these files for release:
-- `DocNexus-v1.0.0-Windows-x64.zip`
-- `DocNexus-v1.0.0-Linux-x64.tar.gz`
-- `DocNexus-v1.0.0-MacOS-x64.tar.gz`
-- `SHA256SUMS.txt`
-- `RELEASE_NOTES.md`
+**"ImportError: No module named docnexus.plugins_dev"**
+*   This is expected in **Open Source Mode**. The code handles this gracefully using `try/except` blocks in the loader.
