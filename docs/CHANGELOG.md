@@ -8,6 +8,9 @@ All notable changes to this project will be documented in this file.
 - **Full-Text Search**: Enhanced search to browse through the content of documents (.md, .txt) in the workspace, not just filenames.
 - **Search Feedback**: Added loading spinner to search icon during backend search operations.
 
+### Fixed
+- **Search Visibility**: Fixed white-on-white text issue in the search bar when using Light Mode.
+
 
 
 ## [v1.1.3] - 2026-01-02
