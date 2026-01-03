@@ -84,28 +84,6 @@ import os
 # If it fails, the application cannot ensure data integrity regarding its version.
 from docnexus.version_info import __version__ as VERSION
 
-app = Flask(__name__, static_folder='static')
-app.config['TEMPLATES_AUTO_RELOAD'] = True
-app.config['SEND_FILE_MAX_AGE_DEFAULT'] = 0
-app.secret_key = os.urandom(24)
-
-# Global Template Context
-@app.context_processor
-def inject_global_context():
-    return {
-        'version': VERSION,
-        'get_slots': PluginRegistry().get_slots
-    }
-
-@app.route('/api/version')
-def get_version():
-    return jsonify({'version': VERSION})
-
-# Note: We do NOT set MAX_CONTENT_LENGTH here because:
-# 1. Form-encoded data can be 2-3x larger than actual file content
-# 2. We validate actual file/content size at the application level instead
-# 3. This allows the server to accept the HTTP request and check the actual data size intelligently
-
 # Configuration
 flask_kwargs = {'static_folder': 'static'}
 
@@ -123,7 +101,32 @@ else:
     # Running from source
     PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
+# Create Flask App (SINGLE INSTANCE)
 app = Flask(__name__, **flask_kwargs)
+app.config['TEMPLATES_AUTO_RELOAD'] = True
+app.config['SEND_FILE_MAX_AGE_DEFAULT'] = 0
+app.secret_key = os.urandom(24)
+
+# Global Template Context
+@app.context_processor
+def inject_global_context():
+    # Use global registry instance if possible, or new one (singleton handles it)
+    reg = PluginRegistry()
+    # Debug logging for this context injection
+    # logger is not initialized yet here, so we use print or wait
+    return {
+        'version': VERSION,
+        'get_slots': reg.get_slots
+    }
+
+@app.route('/api/version')
+def get_version():
+    return jsonify({'version': VERSION})
+
+# Note: We do NOT set MAX_CONTENT_LENGTH here because:
+# 1. Form-encoded data can be 2-3x larger than actual file content
+# 2. We validate actual file/content size at the application level instead
+# 3. This allows the server to accept the HTTP request and check the actual data size intelligently
 
 # Logging Configuration
 LOG_DIR = PROJECT_ROOT / 'logs'
@@ -139,16 +142,29 @@ logging.basicConfig(
     ]
 )
 logger = logging.getLogger('docnexus')
-logger = logging.getLogger('docnexus')
 logger.info(f"Application starting - Version {VERSION}")
 
 # Initialize Plugins
 try:
     logger.info("Initializing Plugin System...")
     load_plugins()
-    PluginRegistry().initialize_all()
+    registry = PluginRegistry()
+    registry.initialize_all()
+    
+    # DEBUG: Verify Registry Health
+    if hasattr(registry, 'get_slots'):
+        logger.info("Registry Health Check: get_slots() available")
+    else:
+        logger.error("Registry Health Check: get_slots() MISSING!")
+        
 except Exception as e:
     logger.error(f"Plugin system initialization failed: {e}", exc_info=True)
+
+@app.errorhandler(500)
+def internal_error(error):
+    import traceback
+    logger.error(f"500 Error: {error}\n{traceback.format_exc()}")
+    return f"Internal Server Error: {error}<br><pre>{traceback.format_exc()}</pre>", 500
 
 # Workspace Configuration
 CONFIG_FILE = PROJECT_ROOT / 'config.json'

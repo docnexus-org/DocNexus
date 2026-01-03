@@ -75,6 +75,22 @@ def run(cmd, cwd=PROJECT_ROOT, capture=False):
 
 # --- Tasks ---
 
+def on_rm_error(func, path, exc_info):
+    """
+    Error handler for ``shutil.rmtree``.
+    If the error is due to an access error (read only file)
+    it attempts to add write permission and then retries.
+    If the error is for another reason it re-raises the error.
+    """
+    import stat
+    # Is the error an access error?
+    if not os.access(path, os.W_OK):
+        os.chmod(path, stat.S_IWUSR)
+        func(path)
+    else:
+        # Ignore other errors or log them
+        print(f"Warning: Could not delete {path}: {exc_info[1]}")
+
 def clean():
     """Remove build artifacts."""
     log("Cleaning build artifacts...", Colors.WARNING)
@@ -82,7 +98,8 @@ def clean():
     for d in dirs_to_clean:
         if d.exists():
             log(f"Removing {d}")
-            shutil.rmtree(d, ignore_errors=True)
+            # Use strict error handling with fallback
+            shutil.rmtree(d, onerror=on_rm_error)
 
 def setup():
     """Create virtual environment and install dependencies."""

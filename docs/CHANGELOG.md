@@ -2,6 +2,17 @@
 
 All notable changes to this project will be documented in this file.
 
+## [v1.2.2] - 2026-01-03
+
+### Added
+- **Phase 1: UI Slots System**: Implemented `PluginRegistry` support for injecting content into predefined UI slots (`HEADER_RIGHT`, `SIDEBAR_BOTTOM`, etc.).
+- **Phase 1: React Integration**: Added support for mounting React components into UI slots using `plugin-loader.js`.
+- **Phase 1: Split-Env Loader**: Implemented dual-mode plugin loading (development `plugins_dev` vs. production bundled plugins).
+
+### Fixed
+- **Critical Stability**: Fixed a major bug where double instantiation of the Flask application caused context processors (like `get_slots`) to be lost, leading to 500 Internal Server Errors.
+- **Build System**: Improved robustness of `clean` operation to handle file locks on Windows (`shutil.rmtree` enhancement).
+
 ## [v1.2.0] - 2026-01-02
 
 ### Added
