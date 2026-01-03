@@ -56,27 +56,33 @@ Examples:
         help='Show version information'
     )
     
-    subparsers = parser.add_subparsers(dest='command', help='Available commands')
-    
-    # Start command
-    start_parser = subparsers.add_parser('start', help='Start the documentation server')
-    start_parser.add_argument(
+    # Global server arguments
+    parser.add_argument(
         '--host',
         type=str,
         default='localhost',
         help='Host to bind to (default: localhost)'
     )
-    start_parser.add_argument(
+    parser.add_argument(
         '--port', '-p',
         type=int,
         default=8000,
         help='Port to bind to (default: 8000)'
     )
-    start_parser.add_argument(
+    parser.add_argument(
         '--debug', '-d',
         action='store_true',
         help='Run in debug mode'
     )
+    
+    # Optional subcommands (keep start for backward compatibility if needed, but make it optional)
+    subparsers = parser.add_subparsers(dest='command', help='Available commands')
+    
+    # Start command (optional alias)
+    start_parser = subparsers.add_parser('start', help='Start the documentation server')
+    # Note: we don't strictly need to add args to start_parser if we handle it at top level,
+    # but for strict correctness if user types "start --port", we might need them there too.
+    # Simpler: Just rely on top-level args.
     
     args = parser.parse_args()
     
@@ -84,7 +90,9 @@ Examples:
         print_version()
         return 0
     
-    if args.command == 'start':
+    # Default behavior: Start Server
+    # Whether command is 'start' or None
+    if args.command == 'start' or args.command is None:
         try:
             start_server(args)
             return 0
@@ -94,16 +102,12 @@ Examples:
         except Exception as e:
             print(f"Error starting server: {e}", file=sys.stderr)
             return 1
-    
-    # If no command specified, show version and help
-    if not args.command:
-        print_version()
-        print()
-        parser.print_help()
-        return 0
-    
+            
     return 0
 
 
 if __name__ == '__main__':
+    # PyInstaller support for Windows
+    import multiprocessing
+    multiprocessing.freeze_support()
     sys.exit(main())

@@ -2,7 +2,7 @@
 
 
 a = Analysis(
-    ['D:\\Code\\DocNexusCorp\\DocNexus\\docnexus\\app.py'],
+    ['D:\\Code\\DocNexusCorp\\DocNexus\\docnexus\\cli.py'],
     pathex=['D:\\Code\\DocNexusCorp\\DocNexus'],
     binaries=[],
     datas=[('D:\\Code\\DocNexusCorp\\DocNexus\\docnexus\\templates', 'docnexus/templates'), ('D:\\Code\\DocNexusCorp\\DocNexus\\docnexus\\static', 'docnexus/static')],

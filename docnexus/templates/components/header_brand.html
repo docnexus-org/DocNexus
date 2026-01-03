@@ -1,8 +1,23 @@
-<div class="brand" style="pointer-events: none; margin-left: 1rem;">
-    <img src="{{ url_for('static', filename='logo.png') }}" class="brand-logo" alt="DocNexus"
-        style="width: 32px; height: 32px;">
+<a href="/" class="brand" style="text-decoration: none;">
+    <img src="{{ url_for('static', filename='logo.png') }}" class="brand-logo" alt="DocNexus">
     <div>
-        <span class="brand-text" style="font-size: 1.25rem;">DocNexus</span>
-        <span class="brand-version">v{{ version | default('1.2.0', true) }}</span>
+        <span class="brand-text">DocNexus</span>
+        <!-- Added id="appVersion" for JS hydration fallback -->
+        <span class="brand-version" id="appVersion">v{{ version }}</span>
     </div>
-</div>
+</a>
+
+<script>
+    (function () {
+        // Hydrate version from API if native template failed
+        const vSpan = document.getElementById('appVersion');
+        if (vSpan && (vSpan.innerText.trim() === 'v' || vSpan.innerText.trim() === 'v')) {
+            fetch('/api/version')
+                .then(r => r.json())
+                .then(d => {
+                    if (d.version) vSpan.innerText = 'v' + d.version;
+                })
+                .catch(e => console.warn('Version check failed', e));
+        }
+    })();
+</script>

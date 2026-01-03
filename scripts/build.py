@@ -170,8 +170,8 @@ def build():
         log(" [PREMIUM] Detected plugins_dev. Including in build...", Colors.OKGREEN)
         cmd.extend(["--add-data", f"{plugins_dev}{os.pathsep}docnexus/plugins_dev"])
         
-    # Entry Point
-    cmd.append(str(PROJECT_ROOT / "docnexus" / "app.py"))
+    # Entry Point (Switch to CLI for correct arg parsing)
+    cmd.append(str(PROJECT_ROOT / "docnexus" / "cli.py"))
     
     run(cmd)
     

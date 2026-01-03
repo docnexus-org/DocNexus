@@ -3,7 +3,7 @@ Markdown Documentation Viewer
 A Flask-based web application that presents Markdown files from a folder as well-formatted HTML sections.
 """
 
-from flask import Flask, render_template, send_from_directory, abort, request, make_response, session, jsonify
+from flask import Flask, render_template, send_from_directory, request, jsonify, redirect, url_for, abort, Response, session
 import os
 import sys
 import markdown
@@ -75,42 +75,26 @@ except Exception:
 
 import os
 
-# Debug Logging
-try:
-    debug_path = os.path.join(os.path.expanduser('~'), 'docnexus_debug.txt')
-    with open(debug_path, 'w') as f:
-        f.write("Starting DocNexus...\n")
-        try:
-            from docnexus.version_info import __version__ as VERSION
-            f.write(f"Success loading version_info: {VERSION}\n")
-        except ImportError as e:
-            VERSION = '0.0.0-fallback'
-            f.write(f"ImportError loading version_info: {e}\n")
-        except Exception as e:
-            VERSION = '0.0.0-error'
-            f.write(f"Unknown error loading version_info: {e}\n")
-except Exception:
-    # If we can't write log, just try to load
-    try:
-        from docnexus.version_info import __version__ as VERSION
-    except:
-        VERSION = '0.0.0-panic'
+# Standard Version Loading (Fail Fast)
+# In production/rendering, we rely on this import succeeding.
+# If it fails, the application cannot ensure data integrity regarding its version.
+from docnexus.version_info import __version__ as VERSION
 
 app = Flask(__name__, static_folder='static')
 app.config['TEMPLATES_AUTO_RELOAD'] = True
 app.config['SEND_FILE_MAX_AGE_DEFAULT'] = 0
-app.secret_key = os.urandom(24)  # For session management
+app.secret_key = os.urandom(24)
 
 # Global Template Context
 @app.context_processor
 def inject_global_context():
-    # Final safety net
-    v = VERSION
-    if not v:
-        v = '1.2.0-error'
     return {
-        'version': v
+        'version': VERSION
     }
+
+@app.route('/api/version')
+def get_version():
+    return jsonify({'version': VERSION})
 
 # Note: We do NOT set MAX_CONTENT_LENGTH here because:
 # 1. Form-encoded data can be 2-3x larger than actual file content
@@ -1014,7 +998,7 @@ def view_file(filename):
         'size': f"{stat.st_size / 1024:.2f} KB"
     }
     
-    return render_template('view.html', file=file_info)
+    return render_template('view.html', file=file_info, version=VERSION)
 
 def get_documentation_files():
     """Get list of available documentation files."""
@@ -1066,7 +1050,7 @@ def documentation(filename=None):
         'version': VERSION
     }
     
-    return render_template('docs.html', doc=doc_info, nav_items=nav_items)
+    return render_template('docs.html', doc=doc_info, nav_items=nav_items, version=VERSION)
 
 @app.route('/preview', methods=['POST'])
 def preview_file():
