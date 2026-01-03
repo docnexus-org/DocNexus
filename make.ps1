@@ -14,7 +14,7 @@ $Python = "python"
 
 if ($Command -eq "help") {
     Write-Host "Wrapper for scripts/build.py" -ForegroundColor Cyan
-    Write-Host "Usage: .\make.ps1 [setup|build|clean|run]"
+    Write-Host "Usage: .\make.ps1 [setup|build|clean|run|launch]"
     exit
 }
 

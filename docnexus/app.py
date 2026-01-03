@@ -295,21 +295,61 @@ SIP_KNOWLEDGE = {
     'sdp_attributes': ['RTP', 'SRTP', 'RTCP', 'codec', 'sendrecv', 'recvonly', 'sendonly']
 }
 
-def get_markdown_files():
-    """Get all markdown files from the specified folder and subfolders."""
+def get_markdown_files(subdir=None, recursive=True):
+    """
+    Get markdown files and subdirectories.
+    If recursive=True, returns flat list of all files (legacy behavior).
+    If recursive=False, returns list of files and directories in subdir.
+    """
     md_path = Path(MD_FOLDER)
+    if subdir:
+        md_path = md_path / subdir
+        # Security check: ensure we haven't traversed out of MD_FOLDER
+        try:
+            md_path.resolve().relative_to(Path(MD_FOLDER).resolve())
+        except ValueError:
+            logger.warning(f"Attempted path traversal: {subdir}")
+            return []
     if not md_path.exists():
-        md_path.mkdir(parents=True, exist_ok=True)
+        if not subdir: # Only create root if missing
+            md_path.mkdir(parents=True, exist_ok=True)
         return []
     
-    files = []
-    # Use rglob to recursively find all markdown files
-    for file_path in md_path.rglob('*'):
+    items = []
+    
+    if recursive:
+        # Legacy/Search Behavior: Recursive flat list of files
+        iterator = md_path.rglob('*')
+    else:
+        # Explorer Behavior: Direct children only
+        iterator = md_path.iterdir()
+
+    for file_path in iterator:
+        rel_path_obj = file_path.relative_to(Path(MD_FOLDER)) 
+        rel_path = str(rel_path_obj).replace('\\', '/')
+        
+        # Handle Directories (Only in non-recursive mode)
+        if not recursive and file_path.is_dir():
+            # Skip hidden folders
+            if file_path.name.startswith('.'): continue
+            
+            items.append({
+                'name': file_path.name,
+                'filename': file_path.name,
+                'relative_path': rel_path, # e.g. "subfolder"
+                'folder': str(Path(subdir) if subdir else ''),
+                'modified': datetime.fromtimestamp(file_path.stat().st_mtime).strftime('%Y-%m-%d %H:%M:%S'),
+                'size': f"{len(list(file_path.iterdir()))} items",
+                'type': 'dir'
+            })
+            continue
+
+        # Handle Files
         if file_path.is_file() and file_path.suffix.lower() in ALLOWED_EXTENSIONS:
             stat = file_path.stat()
-            # Get relative path from doc_gallery folder
-            rel_path = file_path.relative_to(md_path)
-            folder = str(rel_path.parent) if rel_path.parent != Path('.') else ''
+            # Folder is the parent relative to MD_FOLDER
+            folder = str(rel_path_obj.parent).replace('\\', '/')
+            if folder == '.': folder = ''
             
             # Format size
             size_bytes = stat.st_size
@@ -319,26 +359,20 @@ def get_markdown_files():
                 size_str = f"{size_bytes / 1024:.1f} KB"
             else:
                 size_str = f"{size_bytes / (1024 * 1024):.1f} MB"
-            
-            # Keep raw timestamp for sorting
-            raw_modified = stat.st_mtime
-
-            files.append({
+                
+            items.append({
                 'name': file_path.stem,
                 'filename': file_path.name,
-                'type': file_path.suffix.lstrip('.').lower(),
-                'path': file_path,
-                'relative_path': str(rel_path).replace('\\', '/'),
-                'folder': folder.replace('\\', '/') if folder else '',
+                'relative_path': rel_path,
+                'folder': folder,
+                'modified': datetime.fromtimestamp(stat.st_mtime).strftime('%Y-%m-%d %H:%M:%S'),
                 'size': size_str,
-                'raw_size': size_bytes,
-                'modified': datetime.fromtimestamp(raw_modified).strftime('%Y-%m-%d %H:%M'),
-                'raw_modified': raw_modified
+                'type': file_path.suffix.lower().strip('.')
             })
     
-    # Sort by folder, then by modification time (newest first)
-    files.sort(key=lambda x: (x['folder'], -x['raw_modified']))
-    return files
+    # Sort items: Directories first, then files
+    items.sort(key=lambda x: (x['type'] != 'dir', x['name'].lower()))
+    return items
 
 def convert_ascii_tables_to_markdown(content):
     """Convert ASCII tables, network topology, and SIP flow diagrams to appropriate formats."""
@@ -903,10 +937,10 @@ def render_document_from_file(md_file_path: Path, enable_experimental: bool = Fa
                 # Process links in the HTML
                 html_content = process_links_in_html(html_content, base_path=md_file_path.parent)
                 logger.info(f"Successfully rendered Word document: {md_file_path}")
-                return html_content
+                return html_content, ""
             except Exception as e:
                 logger.error(f"Failed to render Word document {md_file_path}: {e}", exc_info=True)
-                return f"<p>Error converting Word document: {str(e)}</p>"
+                return f"<p>Error converting Word document: {str(e)}</p>", ""
         
         # Handle text/markdown files
         with open(md_file_path, 'r', encoding='utf-8') as f:
@@ -916,25 +950,28 @@ def render_document_from_file(md_file_path: Path, enable_experimental: bool = Fa
         
     except Exception as e:
         logger.error(f"Error reading file {md_file_path}: {e}", exc_info=True)
-        return f"<p>Error reading file: {str(e)}</p>"
+        return f"<p>Error reading file: {str(e)}</p>", ""
 
     # Apply markdown processing pipeline
     pipeline = FEATURES.build_pipeline(enable_experimental=enable_experimental)
     processed = run_pipeline(md_text, pipeline)
-    html_content = render_baseline(processed)
+    html_content, toc_content = render_baseline(processed)
     
     # Process links in the rendered HTML
     html_content = process_links_in_html(html_content, base_path=md_file_path.parent)
     
-    return html_content
+    return html_content, toc_content
 
 @app.route('/')
 def index():
-    """Main page displaying list of all markdown files."""
-    md_files = get_markdown_files()
-    logger.info(f"Index route: Found {len(md_files)} files in {MD_FOLDER}")
-    logger.info(f"PROJECT_ROOT: {PROJECT_ROOT}, Frozen: {getattr(sys, 'frozen', False)}")
-    return render_template('index.html', files=md_files, md_folder=str(MD_FOLDER), version=VERSION)
+    """Main page displaying list ofmarkdown files and folders."""
+    folder = request.args.get('folder', '').strip()
+    
+    # Use non-recursive mode to browse specific folder
+    items = get_markdown_files(subdir=folder, recursive=False)
+    
+    logger.info(f"Index route (folder='{folder}'): Found {len(items)} items")
+    return render_template('index.html', files=items, md_folder=str(MD_FOLDER), current_folder=folder, version=VERSION)
 
 @app.route('/debug/info')
 def debug_info():
@@ -986,7 +1023,7 @@ def view_file(filename):
         abort(404)
     
     # Convert to HTML via feature pipeline (baseline + optional experimental)
-    html_content = render_document_from_file(file_path, enable_experimental=enable_experimental)
+    html_content, toc_content = render_document_from_file(file_path, enable_experimental=enable_experimental)
     stat = file_path.stat()
     
     file_info = {
@@ -994,6 +1031,7 @@ def view_file(filename):
         'filename': file_path.name,
         'relative_path': str(file_path.relative_to(MD_FOLDER)),
         'content': html_content,
+        'toc': toc_content,
         'modified': datetime.fromtimestamp(stat.st_mtime).strftime('%Y-%m-%d %H:%M:%S'),
         'size': f"{stat.st_size / 1024:.2f} KB"
     }
@@ -1035,7 +1073,7 @@ def documentation(filename=None):
         abort(404, description="Documentation not found")
     
     # Convert documentation markdown to HTML
-    html_content = render_document_from_file(docs_path, enable_experimental=False)
+    html_content, toc_content = render_document_from_file(docs_path, enable_experimental=False)
     
     # Get navigation list
     nav_items = get_documentation_files()
@@ -1047,6 +1085,7 @@ def documentation(filename=None):
         'name': filename.replace('.md', '').replace('_', ' ').title(),
         'filename': filename,
         'content': html_content,
+        'toc': toc_content,
         'version': VERSION
     }
     
@@ -1143,13 +1182,14 @@ def preview_file():
     # Use same feature pipeline as file view
     pipeline = FEATURES.build_pipeline(enable_experimental=enable_experimental)
     processed = run_pipeline(content, pipeline)
-    html_content = render_baseline(processed)
+    html_content, toc_content = render_baseline(processed)
     html_content = process_links_in_html(html_content, base_path=MD_FOLDER, is_preview=True)
     
     file_info = {
         'name': Path(filename).stem,
         'filename': filename,
         'content': html_content,
+        'toc': toc_content,
         'modified': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
         'size': f"{len(content) / 1024:.2f} KB",
         'preview_mode': True

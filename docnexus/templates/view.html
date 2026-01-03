@@ -298,6 +298,61 @@
             line-height: 1.75;
         }
 
+        /* TOC Styling */
+        .toc-container {
+            background: var(--color-surface);
+            border: 1px solid var(--color-border-default);
+            border-radius: var(--radius-lg);
+            padding: var(--space-4);
+            margin-bottom: var(--space-6);
+        }
+
+        .toc-header {
+            font-weight: 600;
+            color: var(--color-text-primary);
+            margin-bottom: var(--space-2);
+            display: flex;
+            align-items: center;
+            gap: var(--space-2);
+            font-size: 0.9rem;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            opacity: 0.8;
+        }
+
+        .toc-content ul {
+            list-style: none;
+            padding-left: 0;
+            margin: 0;
+        }
+
+        .toc-content li {
+            margin-top: 0.25rem;
+        }
+
+        .toc-content ul ul {
+            padding-left: 1.5rem;
+            /* Indentation for nested levels */
+            margin-top: 0.25rem;
+            border-left: 2px solid var(--color-border-default);
+        }
+
+        .toc-content a {
+            color: var(--color-text-primary);
+            text-decoration: none;
+            font-size: 0.95rem;
+            transition: color 0.15s ease;
+            display: block;
+            padding: 2px 0;
+            opacity: 0.9;
+        }
+
+        .toc-content a:hover {
+            color: var(--color-primary);
+            text-decoration: none;
+            opacity: 1;
+        }
+
         .markdown-content h1,
         .markdown-content h2,
         .markdown-content h3 {
@@ -669,6 +724,18 @@
                         </div>
                     </div>
                 </div>
+
+                {% if file.toc %}
+                <div class="toc-container">
+                    <div class="toc-header">
+                        <i class="fas fa-list-ul"></i> Table of Contents
+                    </div>
+                    <div class="toc-content">
+                        {{ file.toc | safe }}
+                    </div>
+                </div>
+                {% endif %}
+
                 <div class="markdown-content">
                     {{ file.content | safe }}
                 </div>
@@ -712,17 +779,14 @@
         function generateId(text) {
             return text.toLowerCase().replace(/[^\w\s-]/g, '').replace(/\s+/g, '-').replace(/--+/g, '-').trim();
         }
-
-        // --- ToC Generation Logic (Frontend) ---
+        // --- ToC Generation Logic (Frontend - Sidebar) ---
         document.addEventListener('DOMContentLoaded', function () {
             const content = document.querySelector('.markdown-content');
             const tocNav = document.getElementById('tocNav');
 
             if (!content || !tocNav) return;
 
-            // Select headers (H2 and H3)
             const headers = content.querySelectorAll('h2, h3');
-
             if (headers.length === 0) {
                 const sidebar = document.querySelector('.toc-sidebar');
                 if (sidebar) sidebar.style.display = 'none';
@@ -738,23 +802,16 @@
                 const li = document.createElement('li');
                 const a = document.createElement('a');
                 a.className = 'toc-link';
-                // Indent H3
                 if (header.tagName === 'H3') a.classList.add('toc-level-3');
-
                 a.href = '#' + header.id;
                 a.textContent = header.textContent;
 
-                // Highlight on click
                 a.addEventListener('click', (e) => {
                     e.preventDefault();
-                    // Remove active from all
                     document.querySelectorAll('.toc-link').forEach(l => l.classList.remove('active'));
                     a.classList.add('active');
-
-                    // Smooth scroll
                     header.scrollIntoView({ behavior: 'smooth', block: 'start' });
-                    // Update URL hash without jumping
-                    history.pushState(null, null, '#' + header.id);
+                    try { history.pushState(null, null, '#' + header.id); } catch (e) { }
                 });
 
                 li.appendChild(a);
@@ -763,18 +820,13 @@
 
             tocNav.appendChild(ul);
 
-            // Scroll Spy
             const observer = new IntersectionObserver((entries) => {
                 entries.forEach(entry => {
                     if (entry.isIntersecting) {
                         const id = entry.target.id;
                         document.querySelectorAll('.toc-link').forEach(link => {
-                            const href = link.getAttribute('href');
-                            if (href === '#' + id) {
-                                link.classList.add('active');
-                            } else {
-                                link.classList.remove('active');
-                            }
+                            if (link.getAttribute('href') === '#' + id) link.classList.add('active');
+                            else link.classList.remove('active');
                         });
                     }
                 });

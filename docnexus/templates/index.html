@@ -469,8 +469,37 @@
         {% endif %}
 
         <div class="grid" id="fileGrid">
+            {% if current_folder %}
+            <div style="grid-column: 1/-1; margin-bottom: 1rem; display: flex; align-items: center; gap: 1rem;">
+                <a href="{{ url_for('index', folder=current_folder.rsplit('/', 1)[0] if '/' in current_folder else '') }}"
+                    class="btn-icon"
+                    style="background: var(--bg-surface); width: auto; padding: 0 1rem; height: 40px; border-radius: 8px;">
+                    <i class="fas fa-level-up-alt"></i> Up Level
+                </a>
+                <span style="color: var(--text-muted); font-family: var(--font-mono);">
+                    <i class="fas fa-folder-open"></i> {{ current_folder }}
+                </span>
+            </div>
+            {% endif %}
+
             {% for file in files %}
-            <a href="{{ url_for('view_file', filename=file.name) }}" class="card type-{{ file.type }}"
+            {% if file.type == 'dir' %}
+            <a href="{{ url_for('index', folder=file.relative_path) }}" class="card type-dir"
+                data-path="{{ file.relative_path }}" data-name="{{ file.name|lower }}">
+                <div class="card-icon" style="color: #fbbf24;"> <!-- Amber/Gold for folders -->
+                    <i class="fas fa-folder"></i>
+                </div>
+                <div class="card-content">
+                    <div class="card-title" title="{{ file.name }}">{{ file.name }}</div>
+                    <div class="card-meta">
+                        <span>{{ file.size }}</span>
+                        <span>•</span>
+                        <span>Folder</span>
+                    </div>
+                </div>
+            </a>
+            {% else %}
+            <a href="{{ url_for('view_file', filename=file.relative_path) }}" class="card type-{{ file.type }}"
                 data-path="{{ file.relative_path }}" data-name="{{ file.name|lower }}">
                 <div class="card-icon">
                     {% if file.type == 'md' %}
@@ -490,6 +519,7 @@
                     </div>
                 </div>
             </a>
+            {% endif %}
             {% else %}
             <div style="grid-column: 1/-1; text-align: center; padding: 4rem; color: var(--text-muted);">
                 <i class="fas fa-folder-open" style="font-size: 3rem; margin-bottom: 1rem; opacity: 0.5;"></i>

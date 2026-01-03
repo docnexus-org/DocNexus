@@ -206,12 +206,34 @@ def run_dev():
     """Run from source."""
     run([str(PYTHON_EXEC), str(PROJECT_ROOT / "run.py")])
 
+def launch():
+    """Launch the built executable."""
+    log("Launching built executable...", Colors.OKCYAN)
+    
+    # Find the executable
+    exes = list(OUTPUT_DIR.glob("*.exe")) if IS_WINDOWS else list(OUTPUT_DIR.glob("DocNexus_v*"))
+    exes = [e for e in exes if "DocNexus" in e.name]
+    
+    if not exes:
+        log("No executable found in build/output. Run 'build' first.", Colors.FAIL)
+        sys.exit(1)
+    
+    # Pick the latest one
+    latest_exe = max(exes, key=os.path.getctime)
+    log(f"Launching {latest_exe.name}...", Colors.OKGREEN)
+    
+    # Run it
+    if IS_WINDOWS:
+        subprocess.call([str(latest_exe)])
+    else:
+        subprocess.call([str(latest_exe)])
+
 # --- Main CLI ---
 
 def main():
     global LOG_FILE_HANDLE
     parser = argparse.ArgumentParser(description="DocNexus Build System")
-    parser.add_argument("command", choices=["setup", "build", "clean", "run", "release"], help="Command to run")
+    parser.add_argument("command", choices=["setup", "build", "clean", "run", "release", "launch"], help="Command to run")
     parser.add_argument("--log", action="store_true", help="Enable logging to build/build.log")
     
     if len(sys.argv) < 2:
@@ -239,6 +261,8 @@ def main():
             run_dev()
         elif args.command == "release":
             release()
+        elif args.command == "launch":
+            launch()
     finally:
         if LOG_FILE_HANDLE:
             LOG_FILE_HANDLE.close()
