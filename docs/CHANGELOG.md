@@ -3,21 +3,14 @@
 All notable changes to this project will be documented in this file.
 
 ## [v1.2.4] - 2026-01-04
-
-### Refactored
-- **Unified Plugin Registry**: Merged Core and Feature registries to resolve "Split-Brain" issues. `app.py` and `loader.py` now share the single `docnexus.features.registry` instance.
-- **Dependency Injection**: Plugin Loader now injects core classes (`Feature`, `Registry`) into plugins, eliminating import cycles and class identity mismatches.
-- **Passive Plugins**: Simplified plugin architecture; plugins no longer require `PluginInterface` inheritance.
-
 ### Fixed
-- **Word Export**: Fixed `UnrecognizedImageError` in built executable by patching `word_export` plugin to robustly handle relative image paths.
-- **UI Slots**: Restored `get_slots` functionality in the Unified Registry to fix `AttributeError` on the landing page.
-- **Dependencies**: Added `python-docx` and removed unused legacy libs (`pdfkit`) in `requirements.txt`.
+- **Word Export**: Fixed `UnrecognizedImageError` by filtering SVG images and handling external image timeouts gracefully.
+- **Word Export Content**: Fixed missing Table of Contents in exported files.
+- **Word Export Navigation**: Fixed internal TOC links to correctly navigate to document sections.
+- **Registry**: Resolved "Split-Brain" issue by unifying key classes in `docnexus.features.registry`.
+- **UI**: Restored missing UI slots (`HEADER_RIGHT`, `EXPORT_MENU`).
 
 ## [v1.2.3] - 2026-01-04
-
-### Refactored
-- **Feature Framework**: Introduced "Registry Facade" and "Feature Types". `FeatureManager` now aggregates features dynamically from loaded plugins via `get_features()`.
 - **Pipeline Backbone**: Implemented `Pipeline` class to construct and execute sequences of `ALGORITHM` features.
 - **Plugin Loader**: Updated `loader.py` to support `sys._MEIPASS`, enabling plugins bundled with PyInstaller to be correctly discovered at runtime.
 

@@ -5,12 +5,29 @@ import sys
 
 URL = "http://localhost:8000/api/export/docx"
 HTML_CONTENT = """
-<div class="markdown-content">
-    <h1>Verification Document</h1>
-    <p>This is a test paragraph to verify the Word export functionality.</p>
-    <p>Testing resilience against missing images:</p>
-    <img src="non_existent_image.png" alt="Broken Image">
-    <p>End.</p>
+<div id="documentContent">
+    <div class="toc-container">
+        <div class="toc-header">Table of Contents</div>
+        <div class="toc-content">
+            <ul>
+                <li><a href="#verified-edits">Verified Edits</a></li>
+                <li><a href="#docnexus">DocNexus</a></li>
+                <li><a href="#future-roadmap">Future Roadmap</a></li>
+            </ul>
+        </div>
+    </div>
+
+    <div class="markdown-content">
+        <h1 id="verified-edits"><del>Verified Edits</del></h1>
+        <h1 id="docnexus">DocNexus</h1>
+        <blockquote>
+            <p><strong>The Ultimate All-in-One Document Engine.</strong><br><em>Authority. Universality. Power.</em></p>
+        </blockquote>
+        <p>
+            <a href="https://opensource.org/licenses/MIT"><img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="License: MIT"></a>
+        </p>
+        <h2 id="future-roadmap">🔮 Future Roadmap</h2>
+    </div>
 </div>
 """
 

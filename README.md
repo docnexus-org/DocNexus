@@ -81,14 +81,15 @@ python run.py
 
 Detailed guides are available in the `docs/` directory:
 - [User Guide](docs/USER_GUIDE.md)
-- [Architecture Overview](docs/ARCHITECTURE.md)
+- [Architecture Overview](docs/DOCNEXUS_ARCHITECTURE.md)
+- [Plugin Architecture](docs/PLUGIN_ARCHITECTURE.md)
 - [Contributing Guidelines](docs/CONTRIBUTING.md)
 
 ---
 
 ## 🤝 Contributing
 
-We welcome contributions! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for details on how to get started.
+We welcome contributions! Please see [CONTRIBUTING.md](docs/CONTRIBUTING.md) for details on how to get started.
 
 ## 📄 License
 
