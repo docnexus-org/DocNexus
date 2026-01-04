@@ -3,7 +3,7 @@ Markdown Documentation Viewer
 A Flask-based web application that presents Markdown files from a folder as well-formatted HTML sections.
 """
 
-from flask import Flask, render_template, send_from_directory, request, jsonify, redirect, url_for, abort, Response, session
+from flask import Flask, render_template, send_from_directory, request, jsonify, redirect, url_for, abort, Response, session, send_file
 import os
 import sys
 import markdown
@@ -22,38 +22,7 @@ import subprocess
 import tempfile
 from bs4 import BeautifulSoup
 
-# Try to import PDF libraries
-PDF_EXPORT_AVAILABLE = False
-PDF_LIB_NAME = None
-
-try:
-    import pdfkit
-    PDF_EXPORT_AVAILABLE = True
-    PDF_LIB_NAME = "pdfkit"
-except Exception as e:
-    logger.warning(f"Warning: pdfkit not available: {e}. PDF export disabled.")
-    pdfkit = None
-
-# Try to import Word export libraries
-WORD_EXPORT_AVAILABLE = False
-WORD_LIB_NAME = None
-
-try:
-    from htmldocx import HtmlToDocx
-    WORD_EXPORT_AVAILABLE = True
-    WORD_LIB_NAME = "htmldocx"
-except Exception as e:
-    logger.warning(f"Warning: htmldocx not available: {e}. Word export disabled.")
-    HtmlToDocx = None
-
-# Try to import Word input libraries
-WORD_INPUT_AVAILABLE = False
-try:
-    import mammoth
-    WORD_INPUT_AVAILABLE = True
-except Exception as e:
-    logger.warning(f"Warning: mammoth not available: {e}. Word input disabled.")
-    mammoth = None
+# Legacy imports removed (pdfkit, htmldocx, mammoth) as part of Plugin Architecture Refactor
 
 try:
     from docnexus.core.renderer import render_baseline, run_pipeline
@@ -72,7 +41,7 @@ except Exception:
     from docnexus.features.standard import normalize_headings, sanitize_attr_tokens, build_toc, annotate_blocks
 
 from docnexus.core.loader import load_plugins
-from docnexus.core.registry import PluginRegistry
+from docnexus.features.registry import PluginRegistry
 
 import os
 
@@ -144,9 +113,19 @@ logger.info(f"Application starting - Version {VERSION}")
 # Initialize Plugins
 try:
     logger.info("Initializing Plugin System...")
-    load_plugins()
+    
+    # Force loader logging to ensure we see plugin discovery
+    logging.getLogger('docnexus.core.loader').setLevel(logging.DEBUG)
+    
     registry = PluginRegistry()
+    logger.info(f"App sees PluginRegistry ID: {id(registry)}")
+    from docnexus.core.loader import load_plugins
+    load_plugins(registry)
+    logger.info(f"App sees PluginRegistry ID: {id(registry)}")
     registry.initialize_all()
+    
+    logger.info(f"Registry initialized. Plugin count: {len(registry.get_all_plugins())}")
+    logger.debug(f"Registry contents: {registry.get_all_plugins()}")
     
     # DEBUG: Verify Registry Health
     if hasattr(registry, 'get_slots'):
@@ -1189,392 +1168,58 @@ def preview_file():
     
     return render_template('view.html', file=file_info, version=VERSION)
 
-@app.route('/export-pdf', methods=['POST'])
-def export_pdf():
-    """Export the current document view to PDF using pdfkit/wkhtmltopdf."""
-    if not PDF_EXPORT_AVAILABLE:
-        return jsonify({
-            "error": "PDF export is not available. Please install pdfkit library.",
-            "install_guide": "pip install pdfkit"
-        }), 503
-    
+@app.route('/api/export/<format_ext>', methods=['POST'])
+def handle_export_request(format_ext):
+    """
+    Generic export handler. Delegates to registered plugins.
+    """
     try:
-        data = request.get_json()
+        data = request.json
         html_content = data.get('html', '')
-        filename = data.get('filename', 'document.pdf')
+        # filename = data.get('filename') # handled by frontend download logic or Content-Disposition
         
-        if not html_content:
-            abort(400, description="No HTML content provided")
+        # Resolve Handler
+        handler = FEATURES.get_export_handler(format_ext)
         
-        logger.info(f"PDF export requested: {filename}, HTML size: {len(html_content)} bytes")
-        
-        # Ensure filename has .pdf extension
-        if not filename.endswith('.pdf'):
-            filename = filename.rsplit('.', 1)[0] + '.pdf' if '.' in filename else filename + '.pdf'
-        
-        # Try to find wkhtmltopdf executable using new helper
-        wkhtmltopdf_path = find_wkhtmltopdf()
-        
-        if not wkhtmltopdf_path:
-            # Not found - offer auto-install
-            logger.warning("wkhtmltopdf not found - auto-install available")
+        if not handler:
+            # Return specific error for frontend "Upsell" logic
             return jsonify({
-                'error': 'wkhtmltopdf_not_found',
-                'message': 'PDF export requires wkhtmltopdf.',
-                'auto_install_available': True,
-                'download_size': '15 MB',
-                'install_options': ['portable']
+                "error": "Export plugin not installed", 
+                "code": "MISSING_PLUGIN",
+                "plugin_name": f"docnexus-plugin-{format_ext}",
+                "message": f" The {format_ext.upper()} export plugin is not installed."
             }), 404
-        
-        # Configure pdfkit with found path
-        config = pdfkit.configuration(wkhtmltopdf=wkhtmltopdf_path)
-        
-        # PDF options for high quality output
-        options = {
-            'page-size': 'A4',
-            'margin-top': '20mm',
-            'margin-right': '20mm',
-            'margin-bottom': '20mm',
-            'margin-left': '20mm',
-            'encoding': 'UTF-8',
-            'no-outline': None,
-            'enable-local-file-access': None,
-            'print-media-type': None,
-            'dpi': 300,
-            'image-quality': 100,
-        }
-        
+            
+        # Execute Handler
+        # Handler signature: (html_content: str) -> bytes
         try:
-            # Generate PDF from HTML string
-            pdf_bytes = pdfkit.from_string(html_content, False, options=options, configuration=config)
-            logger.info(f"PDF generated successfully: {len(pdf_bytes)} bytes")
-        except OSError as e:
-            # wkhtmltopdf execution failed
-            if 'No wkhtmltopdf executable found' in str(e) or 'wkhtmltopdf' in str(e).lower():
-                logger.error(f"wkhtmltopdf execution failed: {e}")
-                return jsonify({
-                    'error': 'wkhtmltopdf_not_found',
-                    'message': 'wkhtmltopdf could not be executed.',
-                    'auto_install_available': True,
-                    'details': str(e)
-                }), 404
-            raise
+            output_data = handler(html_content)
+        except Exception as e:
+            logger.error(f"Plugin handler failed: {e}", exc_info=True)
+            return jsonify({"error": f"Plugin Execution Failed: {str(e)}"}), 500
         
-        # Create response with PDF
-        response = make_response(pdf_bytes)
-        response.headers['Content-Type'] = 'application/pdf'
-        response.headers['Content-Disposition'] = f'attachment; filename="{filename}"'
-        
-        return response
-        
-    except Exception as e:
-        logger.error(f"Error generating PDF: {e}", exc_info=True)
-        abort(500, description=f"Failed to generate PDF: {str(e)}")
-        abort(500, description=f"Failed to generate PDF: {str(e)}")
+        if not output_data:
+             return jsonify({"error": "Export handler returned no data"}), 500
 
-def add_bookmark(paragraph, bookmark_name):
-    """Add a bookmark to a paragraph in a Word document."""
-    from docx.oxml import OxmlElement
-    from docx.oxml.ns import qn
-    
-    # Create bookmark start element
-    bookmark_start = OxmlElement('w:bookmarkStart')
-    bookmark_start.set(qn('w:id'), str(hash(bookmark_name) % 10000))  # Generate unique ID
-    bookmark_start.set(qn('w:name'), bookmark_name)
-    
-    # Create bookmark end element
-    bookmark_end = OxmlElement('w:bookmarkEnd')
-    bookmark_end.set(qn('w:id'), str(hash(bookmark_name) % 10000))
-    
-    # Insert bookmark around the paragraph content
-    paragraph._element.insert(0, bookmark_start)
-    paragraph._element.append(bookmark_end)
+        # Determine Mime Type
+        mime_type = "application/octet-stream"
+        if format_ext == 'pdf':
+            mime_type = "application/pdf"
+        elif format_ext == 'docx':
+            mime_type = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+            
+        from io import BytesIO
+        return send_file(
+            BytesIO(output_data),
+            mimetype=mime_type,
+            as_attachment=True,
+            download_name=f"export.{format_ext}"
+        )
 
-@app.route('/export-word', methods=['POST'])
-def export_word():
-    """Export the current document view to Word (.docx) format maintaining exact formatting."""
-    if not WORD_EXPORT_AVAILABLE:
-        return {
-            "error": "Word export is not available. Please install htmldocx.",
-            "install_guide": "pip install htmldocx"
-        }, 503
-    
-    try:
-        # Increase timeout handling for large documents
-        data = request.get_json()
-        html_content = data.get('html', '')
-        filename = data.get('filename', 'document.docx')
-        
-        if not html_content:
-            abort(400, description="No HTML content provided")
-        
-        # Check HTML content size and provide better feedback
-        html_size = len(html_content.encode('utf-8'))
-        if html_size > MAX_EXPORT_HTML_SIZE:
-            size_mb = html_size / (1024 * 1024)
-            max_mb = MAX_EXPORT_HTML_SIZE / (1024 * 1024)
-            return {
-                "error": "Export Content Too Large",
-                "message": f"The HTML content is {size_mb:.2f} MB, exceeding the {max_mb:.0f} MB limit for exports.",
-                "details": "Try exporting a smaller section of the document.",
-                "tip": "Consider splitting the document into multiple files before exporting."
-            }, 413
-        
-        content_size_mb = html_size / (1024 * 1024)
-        logger.info(f"Processing Word export: {filename} ({content_size_mb:.2f} MB)")
-        
-        if content_size_mb > 30:
-            logger.warning(f"Large document detected ({content_size_mb:.2f} MB). Processing may take longer...")
-        
-        # Ensure filename has .docx extension
-        if not filename.endswith('.docx'):
-            filename = filename.rsplit('.', 1)[0] + '.docx' if '.' in filename else filename + '.docx'
-        
-        # Clean HTML content - remove script tags, style tags in head, and other non-document elements
-        # Parse HTML and extract only the document content
-        # Use lxml parser for better performance on large documents
-        from bs4 import BeautifulSoup
-        
-        try:
-            soup = BeautifulSoup(html_content, 'lxml')
-        except:
-            # Fallback to html.parser if lxml not available
-            soup = BeautifulSoup(html_content, 'html.parser')
-        
-        logger.info("Cleaning HTML content...")
-        
-        # Remove all script tags
-        for script in soup.find_all('script'):
-            script.decompose()
-        
-        # Remove style tags (inline styles in elements will be preserved)
-        for style in soup.find_all('style'):
-            style.decompose()
-        
-        # Remove navigation elements
-        for nav in soup.find_all('nav'):
-            nav.decompose()
-        
-        # Remove head tag content (but keep the structure for parsing)
-        if soup.head:
-            # Keep only meta charset for proper encoding
-            for tag in soup.head.find_all():
-                if tag.name != 'meta' or tag.get('charset') is None:
-                    tag.decompose()
-        
-        print("Extracting main content...")
-        
-        # Extract only the main content area (markdown-content div)
-        main_content = soup.find(class_='markdown-content')
-        if main_content:
-            # Keep heading IDs for bookmark creation later, but don't add HTML anchors
-            # (htmldocx doesn't process them correctly)
-            
-            # Add inline styles to match rendered version
-            # Style tables with MORE EXPLICIT colors for Word
-            for table in main_content.find_all('table'):
-                # Set table-level styling
-                table['style'] = 'border-collapse: collapse; width: 100%; border: 2px solid rgba(99, 102, 241, 0.2); margin-bottom: 20px;'
-                table['border'] = '1'
-                table['cellpadding'] = '0'
-                table['cellspacing'] = '0'
-                
-                # Find or create thead
-                thead = table.find('thead')
-                if not thead:
-                    # If no thead, check if first row should be header
-                    first_row = table.find('tr')
-                    if first_row and first_row.find('th'):
-                        thead = soup.new_tag('thead')
-                        first_row.extract()
-                        thead.append(first_row)
-                        table.insert(0, thead)
-                
-                # Style table headers - Word doesn't support gradients, use solid purple
-                for th in table.find_all('th'):
-                    # Use multiple methods for maximum compatibility
-                    th['bgcolor'] = '#6366f1'
-                    th['style'] = 'background-color: #6366f1 !important; color: #ffffff !important; padding: 14px 18px; font-weight: 700; text-align: left; border: 1px solid rgba(99, 102, 241, 0.2); font-size: 13px; text-transform: uppercase; letter-spacing: 0.5px;'
-                
-                # Style table cells with borders and proper padding
-                for td in table.find_all('td'):
-                    td['style'] = 'padding: 14px 18px; text-align: left; border: 1px solid var(--color-border-default); background-color: #ffffff;'
-                
-                # Don't apply alternating row colors in HTML - will handle in Word post-processing
-                # to ensure proper cell-by-cell styling
-            
-            # Style headings with STRONG colors to match rendered version
-            for h1 in main_content.find_all('h1'):
-                h1['style'] = 'color: #6366f1 !important; font-size: 32px; font-weight: 800; margin-top: 24px; margin-bottom: 16px; border-bottom: 3px solid #6366f1; padding-bottom: 8px;'
-            
-            for h2 in main_content.find_all('h2'):
-                h2['style'] = 'color: #8b5cf6 !important; font-size: 24px; font-weight: 700; margin-top: 20px; margin-bottom: 14px; border-bottom: 2px solid #c4b5fd; padding-bottom: 6px;'
-            
-            for h3 in main_content.find_all('h3'):
-                h3['style'] = 'color: #a855f7 !important; font-size: 20px; font-weight: 600; margin-top: 18px; margin-bottom: 12px;'
-            
-            for h4 in main_content.find_all('h4'):
-                h4['style'] = 'color: #c084fc !important; font-size: 18px; font-weight: 600; margin-top: 16px; margin-bottom: 10px;'
-            
-            for h5 in main_content.find_all('h5'):
-                h5['style'] = 'color: #d8b4fe !important; font-size: 16px; font-weight: 600; margin-top: 14px; margin-bottom: 8px;'
-            
-            for h6 in main_content.find_all('h6'):
-                h6['style'] = 'color: #e9d5ff !important; font-size: 14px; font-weight: 600; margin-top: 12px; margin-bottom: 6px;'
-            
-            # Style code blocks
-            for pre in main_content.find_all('pre'):
-                pre['style'] = 'background-color: #f5f5f4; padding: 16px; border-radius: 8px; border: 2px solid #e7e5e4; font-family: Consolas, Courier New, monospace; overflow-x: auto; margin: 12px 0;'
-            
-            # Style inline code
-            for code in main_content.find_all('code'):
-                if not code.parent or code.parent.name != 'pre':
-                    code['style'] = 'background-color: #faf5ff; color: #8b5cf6; padding: 2px 6px; border-radius: 4px; font-family: Consolas, Courier New, monospace; font-size: 0.9em; border: 1px solid #e9d5ff;'
-            
-            # Style blockquotes
-            for blockquote in main_content.find_all('blockquote'):
-                blockquote['style'] = 'border-left: 4px solid #6366f1; padding: 16px; margin: 16px 0; background-color: #f5f3ff; color: #44403c;'
-            
-            # Create a clean HTML structure with just the content
-            clean_html = f'<html><head><meta charset="utf-8"></head><body>{str(main_content)}</body></html>'
-        else:
-            # Fallback: use body content if markdown-content not found
-            if soup.body:
-                clean_html = f'<html><body>{soup.body.decode_contents()}</body></html>'
-            else:
-                clean_html = str(soup)
-        
-        # Create a new Word document
-        logger.info("Creating Word document...")
-        from docx import Document
-        from docx.shared import RGBColor, Pt
-        from docx.oxml import OxmlElement
-        from docx.oxml.ns import qn
-        doc = Document()
-        
-        # Initialize the HTML to DOCX converter
-        logger.info("Converting HTML to Word...")
-        new_parser = HtmlToDocx()
-        
-        # Parse and add cleaned HTML content to the document
-        # The htmldocx library maintains most HTML styling including:
-        # - Headings (h1-h6) with colors
-        # - Paragraphs with formatting
-        # - Bold, italic, underline
-        # - Tables with colored headers
-        # - Lists (ordered and unordered)
-        # - Images
-        # - Text colors and backgrounds
-        # - Font sizes
-        # NOTE: htmldocx does NOT support internal anchor links (bookmarks)
-        # We need to add these manually after conversion
-        new_parser.add_html_to_document(clean_html, doc)
-        
-        logger.info("Post-processing document...")
-        # ==== POST-PROCESSING: Add bookmarks and fix internal hyperlinks ====
-        # htmldocx library doesn't support internal document bookmarks/anchors
-        # We need to manually add bookmarks to headings and fix TOC links
-        
-        # Step 1: Find all heading IDs from the original HTML
-        heading_ids = {}
-        for heading in main_content.find_all(['h1', 'h2', 'h3', 'h4', 'h5', 'h6']):
-            heading_id = heading.get('id')
-            heading_text = heading.get_text(strip=True)
-            if heading_id and heading_text:
-                heading_ids[heading_text] = heading_id
-        
-        # Step 2: Add bookmarks to headings in the Word document
-        for paragraph in doc.paragraphs:
-            # Check if this paragraph is a heading with matching text
-            if paragraph.style.name.startswith('Heading') or paragraph.text in heading_ids:
-                heading_text = paragraph.text.strip()
-                if heading_text in heading_ids:
-                    bookmark_name = heading_ids[heading_text]
-                    # Add bookmark to this paragraph
-                    add_bookmark(paragraph, bookmark_name)
-        
-        # Step 3: Fix internal hyperlinks in the document
-        # Find all hyperlinks and convert TOC links from external to internal bookmarks
-        for paragraph in doc.paragraphs:
-            for hyperlink in paragraph._element.findall('.//w:hyperlink', 
-                                                        namespaces={'w': 'http://schemas.openxmlformats.org/wordprocessingml/2006/main',
-                                                                   'r': 'http://schemas.openxmlformats.org/officeDocument/2006/relationships'}):
-                # Get the relationship ID
-                r_id = hyperlink.get(qn('r:id'))
-                if r_id:
-                    # Get the target from the relationship
-                    try:
-                        rel = paragraph.part.rels[r_id]
-                        target_url = rel.target_ref
-                        
-                        # Check if this is an internal anchor link (starts with #)
-                        if target_url and target_url.startswith('#'):
-                            bookmark_name = target_url[1:]  # Remove the #
-                            
-                            # Remove the external relationship
-                            del paragraph.part.rels[r_id]
-                            
-                            # Convert to internal bookmark link
-                            hyperlink.set(qn('w:anchor'), bookmark_name)
-                            # Remove the r:id attribute since it's now an internal link
-                            if qn('r:id') in hyperlink.attrib:
-                                del hyperlink.attrib[qn('r:id')]
-                    except (KeyError, AttributeError):
-                        pass  # Skip if relationship not found
-        
-        # Step 4: Post-process tables in Word document
-        # Apply proper formatting that htmldocx might not handle correctly
-        from docx.shared import RGBColor, Pt
-        from docx.enum.text import WD_ALIGN_PARAGRAPH
-        
-        for table in doc.tables:
-            # Style table borders
-            table.style = 'Table Grid'
-            
-            # Process header row (first row)
-            if len(table.rows) > 0:
-                header_row = table.rows[0]
-                for cell in header_row.cells:
-                    # Set header cell background to purple
-                    shading_elm = OxmlElement('w:shd')
-                    shading_elm.set(qn('w:fill'), '6366f1')  # Purple background
-                    cell._element.get_or_add_tcPr().append(shading_elm)
-                    
-                    # Format text: white color, bold, uppercase
-                    for paragraph in cell.paragraphs:
-                        for run in paragraph.runs:
-                            run.font.color.rgb = RGBColor(255, 255, 255)  # White text
-                            run.font.bold = True
-                            run.font.size = Pt(11)
-                        paragraph.alignment = WD_ALIGN_PARAGRAPH.LEFT
-            
-            # Apply alternating row colors for data rows (skip header)
-            for idx, row in enumerate(table.rows[1:], start=1):
-                for cell in row.cells:
-                    # Every other row gets a light background
-                    if idx % 2 == 0:
-                        shading_elm = OxmlElement('w:shd')
-                        shading_elm.set(qn('w:fill'), 'f9fafb')  # Light gray
-                        cell._element.get_or_add_tcPr().append(shading_elm)
-        
-        # Save to BytesIO buffer
-        logger.info("Saving document...")
-        buffer = io.BytesIO()
-        doc.save(buffer)
-        buffer.seek(0)
-        
-        print(f"Word export complete: {filename}")
-        
-        # Create response with Word document
-        response = make_response(buffer.getvalue())
-        response.headers['Content-Type'] = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
-        response.headers['Content-Disposition'] = f'attachment; filename="{filename}"'
-        
-        return response
-        
     except Exception as e:
-        logger.error(f"Error generating Word document: {e}", exc_info=True)
-        abort(500, description=f"Failed to generate Word document: {str(e)}")
+        logger.error(f"Export failed: {e}", exc_info=True)
+        return jsonify({"error": str(e)}), 500
+
 
 @app.route('/search')
 def search():
@@ -1956,6 +1601,23 @@ def search_files():
                 continue # Skip unreadable files
                 
     return jsonify(matches)
+
+
+@app.route('/api/debug/features', methods=['GET'])
+def debug_features():
+    features_list = []
+    if FEATURES and FEATURES._features:
+        for f in FEATURES._features:
+            features_list.append({
+                "name": f.name,
+                "type": str(f.type),
+                "state": str(f.state)
+            })
+    return jsonify({
+        "count": len(features_list),
+        "features": features_list,
+        "registry_plugins": [str(p) for p in PluginRegistry().get_all_plugins()] if PluginRegistry() else []
+    })
 
 if __name__ == '__main__':
     app.run(debug=True, host='localhost', port=8000)

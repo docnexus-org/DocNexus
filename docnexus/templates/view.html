@@ -1004,11 +1004,11 @@
         // Settings and TOC are now handled by theme.js
 
         function exportToPDF() {
-            performExport('/export-pdf', 'pdf');
+            performExport('/api/export/pdf', 'pdf');
         }
 
         function exportToWord() {
-            performExport('/export-word', 'docx');
+            performExport('/api/export/docx', 'docx');
         }
 
         function performExport(endpoint, ext) {

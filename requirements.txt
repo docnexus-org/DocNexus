@@ -1,10 +1,9 @@
 flask
 markdown
 beautifulsoup4
-pdfkit
 requests
 python-pptx
 pymdown-extensions
 Pygments
 htmldocx
-mammoth
+python-docx

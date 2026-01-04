@@ -1,120 +1,49 @@
-# Plugin Architecture (v1.2.1)
+# Plugin Architecture (v1.2.4)
 
-This document outlines the architecture for the DocNexus Plugin System, introduced in v1.2.1.
+This document outlines the architecture for the DocNexus Plugin System, updated in v1.2.4.
 
 ## Core Concepts
 
-The plugin system is built on two foundational components located in `docnexus/core`:
+The plugin system has been refactored to use a **Unified Registry** and **Dependency Injection** to ensure stability and resolving "Split-Brain" issues.
 
-1.  **PluginInterface (`plugin_interface.py`)**
-2.  **PluginRegistry (`registry.py`)**
+### 1. Unified Registry (`docnexus.features.registry`)
 
-### 1. PluginInterface (The Contract)
+*   **Location**: `docnexus/features/registry.py`
+*   **Role**: A single source of truth for both "Features" (Algorithms) and "UI Slots". 
+*   **Legacy**: `docnexus/core/registry.py` has been removed.
 
-All plugins **MUST** inherit from the abstract base class `PluginInterface`. This enforces a strict contract for lifecycle management.
+### 2. Dependency Injection (The Loader)
 
-```python
-class PluginInterface(ABC):
-    @abstractmethod
-    def get_meta(self) -> Dict[str, Any]: ...
-    
-    @abstractmethod
-    def initialize(self, registry: Any) -> None: ...
-    
-    @abstractmethod
-    def shutdown(self) -> None: ...
-```
+*   **Logic**: `docnexus/core/loader.py`
+*   **Mechanism**: The loader injects core dependencies (`PluginRegistry`, `Feature`, `FeatureType`, `FeatureState`) directly into the plugin's namespace before execution.
+*   **Benefit**: Plugins do not need to import these classes, preventing "Class Identity Mismatch" issues where a plugin's `Feature` class differs from the App's `Feature` class.
 
-*   **`get_meta()`**: Returns metadata (name, version, author). Used for dependency resolution and UI display.
-*   **`initialize(registry)`**: The setup hook. This is where plugins register routes, add UI slots, or hook into the processing pipeline. It receives the `registry` instance to interact with other plugins.
-*   **`shutdown()`**: Cleanup hook for closing handles/connections.
+### 3. Passive Plugins (No Interface)
 
-### 2. PluginRegistry (The Manager)
-
-The `PluginRegistry` is a **Singleton** that acts as the central hub.
-
-*   **Centralized Tracking**: Maintains a dictionary of all active plugins.
-*   **Lifecycle Orchestration**: Responsible for calling `initialize()` and `shutdown()` on all plugins in the correct order.
-*   **API Access**: Provides methods like `get_plugin(name)` for inter-plugin communication.
-
-### 3. PluginLoader (`loader.py`)
-
-Introduced in v1.2.2, the loader handles the discovery of plugin modules from the filesystem.
-
-*   **Split-Environment Strategy**:
-    *   **Development**: Scans `docnexus/plugins_dev` (typically a junction to the source).
-    *   **Production**: Scans `plugins/` directory adjacent to the executable.
-*   **Dynamic Import**: Uses `importlib` to load `plugin.py` files found in these directories.
-*   **Auto-Registration**: Plugins are expected to register themselves upon import (e.g., `PluginRegistry().register(MyPlugin())`).
-
-### 4. UI Slots (`registry.register_slot`)
-
-Plugins can inject content into predefined areas (Slots) of the UI.
-
-*   **Mechanism**: `registry.register_slot(slot_name, html_content)`
-*   **Rendering**: Flask templates iterate over `get_slots(slot_name)` and render the HTML safely.
-*   **Available Slots**:
-    *   **Shared**:
-        *   `HEADER_RIGHT`: Icons/Buttons in the top navigation bar.
-    *   **Index Page (`index.html`)**:
-        *   `MAIN_TOP`: Just below header, above content grid.
-        *   `FOOTER_RIGHT`: Bottom right corner.
-    *   **View Page (`view.html`)**:
-        *   `EXPORT_MENU`: Inside the "Export" dropdown.
-        *   `SIDEBAR_BOTTOM`: Bottom of the right-side TOC sidebar.
-        *   `CONTENT_START`: Top of the document content area.
-        *   `CONTENT_END`: Bottom of the document content area.
-
-### 5. Feature Framework (Registry Facade)
-
-Refactored in v1.2.3, the `FeatureManager` acts as a facade, pulling capabilities ("Features") from registered plugins.
-
-#### Feature Types
-*   **ALGORITHM**: Text transformation logic (e.g., standardizing headers, converting tables, generating TOCs). Chained together in a `Pipeline`.
-*   **UI_EXTENSION**: Legacy/Misc UI logic.
-*   **EXPORT_HANDLER**: Custom export logic (e.g., PDF, DOCX).
-
-#### Pipeline Backbone
-The `Pipeline` class represents a sequence of `ALGORITHM` features.
-1.  **Construction**: `FeatureManager.build_pipeline(enable_experimental)`
-2.  **Execution**: `pipeline.run(markdown_content)`
-3.  **Lego Blocks**: Plugins can provide their own "blocks" (Algorithms) which are automatically inserted into the pipeline.
-
-#### Declaring Features
-Plugins override `get_features()` to expose their capabilities:
+Plugins no longer need to inherit from `PluginInterface`. They simplest need to expose a `get_features()` function.
 
 ```python
-def get_features(self) -> List[Any]:
+# plugin.py
+def get_features():
+    # Classes are injected!
+    _Feature = globals().get('Feature')
     return [
-        Feature("MY_ALGORITHM", self.my_handler, FeatureState.STANDARD, FeatureType.ALGORITHM)
+        _Feature("MyFeature", handler, ...)
     ]
 ```
 
-### 6. Export Handlers (Format Plugins)
+### 4. UI Slots (`register_slot`)
 
-Plugins can register `EXPORT_HANDLER` features to take over document conversion for specific formats.
+Plugins can inject content into predefined UI areas.
+*   **Method**: `PluginRegistry().register_slot(slot_name, html_content)`
+*   **Slots**: `HEADER_RIGHT`, `SIDEBAR_BOTTOM`, `EXPORT_MENU`, etc.
 
-#### Architecture
-*   **Request**: `POST /api/export/<format_ext>` (e.g., `pdf`, `docx`)
-*   **Resolution**: `FeatureManager.get_export_handler(format_ext)` looks for a registered feature.
-*   **Execution**:
-    *   **Handler Found**: Calls `handler(html_content, filename)`.
-    *   **Handler Missing**: Returns `404 Handler Not Found` with metadata.
-*   **Frontend**: `view.html` inspects the error. If it's a "Missing Handler", it triggers the **"Install Plugin"** modal (Upsell flow).
+### 5. Export Handlers
 
-## Usage
-
-### Registration
-Plugins are registered via `PluginRegistry().register(instance)`. This is typically done by the plugin loader (`loader.py`).
-
-### Initialization
-1.  **Loader**: `loader.py` scans appropriate directories (including `sys._MEIPASS` when frozen).
-2.  **Registration**: Plugins register themselves.
-3.  **App Startup**: `app.py` calls `PluginRegistry().initialize_all()`.
-4.  **Feature Refresh**: `app.py` calls `FEATURES.refresh()` to pull features from initialized plugins into the `FeatureManager`.
+Plugins registering `EXPORT_HANDLER` features take over `/api/export/<ext>` routes.
+*   **Robustness**: The build system now bundles `python-docx` for reliable Word exports.
+*   **Image Handling**: Export plugins must robustly handle image paths, especially in frozen (executable) environments.
 
 ## Directory Structure
-*   `docnexus/core/plugin_interface.py`: The Contract (ABC).
-*   `docnexus/core/registry.py`: The State (Singleton PluginRegistry).
-*   `docnexus/core/loader.py`: The Discovery (File Scanner).
-*   `docnexus/features/registry.py`: The Facade (FeatureManager & Pipeline).
+*   `docnexus/core/loader.py`: The Scanner & Injector.
+*   `docnexus/features/registry.py`: The Unified Registry & Feature Manager.

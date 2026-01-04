@@ -266,7 +266,7 @@ def verify():
         log(f"Venv: NOT FOUND at {VENV_DIR}", Colors.FAIL)
     
     # Check Imports
-    required = ['flask', 'markdown', 'pdfkit', 'mammoth']
+    required = ['flask', 'markdown']
     log("\nChecking libraries:", Colors.HEADER)
     for lib in required:
         try:
