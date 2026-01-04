@@ -65,10 +65,8 @@
         <!-- Filters -->
         <div style="display:flex; gap:12px; margin-bottom: 32px; overflow-x: auto;">
             <button class="filter-btn active" onclick="filterPlugins(this, 'all')">All</button>
-            <button class="filter-btn" onclick="filterPlugins(this, 'featured')">Featured</button>
-            <button class="filter-btn" onclick="filterPlugins(this, 'export')">Export Tools</button>
-            <button class="filter-btn" onclick="filterPlugins(this, 'theme')">Themes</button>
-            <button class="filter-btn" onclick="filterPlugins(this, 'installed')">Installed</button>
+            <button class="filter-btn" onclick="filterPlugins(this, 'bundled')">Bundled</button>
+            <button class="filter-btn" onclick="filterPlugins(this, 'installed')">User Installed</button>
         </div>
 
         <div class="extensions-grid" id="pluginGrid">
@@ -113,50 +111,18 @@
 
         async function fetchRegistry() {
             try {
-                // Mock Registry Fetch for v1.2.0 Demo
-                // In production, this calls /api/plugins/registry
-                allPlugins = [
-                    {
-                        id: 'pdf-pro',
-                        name: 'PDF Professional',
-                        author: 'DocNexus Official',
-                        downloads: '450k',
-                        category: 'export',
-                        tags: ['featured'],
-                        desc: 'Advanced export engine for generating high-fidelity PDFs using WebKit. Supports CSS print media and page breaks.',
-                        icon: 'fa-file-pdf',
-                        enabled: false,
-                        verified: true
-                    },
-                    {
-                        id: 'ppt-connect',
-                        name: 'PowerPoint Connect',
-                        author: 'DocNexus Official',
-                        downloads: '120k',
-                        category: 'export',
-                        tags: ['featured'],
-                        desc: 'Seamlessly convert your Markdown documentation into editable PowerPoint slides. Requires authentication.',
-                        icon: 'fa-file-powerpoint',
-                        enabled: false,
-                        verified: true
-                    },
-                    {
-                        id: 'tokyo-night',
-                        name: 'Tokyo Night Theme',
-                        author: 'Community',
-                        downloads: '85k',
-                        category: 'theme',
-                        tags: [],
-                        desc: 'A clean, dark Visual Studio Code theme that celebrates the lights of Downtown Tokyo at night.',
-                        icon: 'fa-moon',
-                        enabled: false,
-                        verified: false
-                    }
-                ];
-
+                // Fetch from real API
+                const response = await fetch('/api/plugins');
+                if (!response.ok) throw new Error("Failed to fetch plugins");
+                allPlugins = await response.json();
                 renderPlugins(allPlugins);
             } catch (err) {
                 console.error(err);
+                document.getElementById('pluginGrid').innerHTML = `
+                    <div style="grid-column: 1/-1; text-align: center; color: var(--color-error); padding: 2rem;">
+                        <i class="fas fa-exclamation-triangle"></i> Failed to load extensions.
+                    </div>
+                `;
             }
         }
 
@@ -168,16 +134,14 @@
             // Filter Data
             if (category === 'all') {
                 renderPlugins(allPlugins);
-            } else if (category === 'featured') {
-                // Filter by tag
-                const filtered = allPlugins.filter(p => p.tags && p.tags.includes('featured'));
+            } else if (category === 'bundled') {
+                const filtered = allPlugins.filter(p => p.type === 'bundled');
                 renderPlugins(filtered);
             } else if (category === 'installed') {
-                // Filter by enabled state for demo
-                const filtered = allPlugins.filter(p => p.enabled);
+                const filtered = allPlugins.filter(p => p.type === 'installed');
                 renderPlugins(filtered);
             } else {
-                // Filter by category property
+                // Filter by category property (e.g. 'export', 'theme')
                 const filtered = allPlugins.filter(p => p.category === category);
                 renderPlugins(filtered);
             }
@@ -190,11 +154,14 @@
                 grid.innerHTML = `
                     <div style="grid-column: 1/-1; text-align: center; padding: 4rem; opacity: 0.7;">
                         <i class="fas fa-box-open" style="font-size: 2rem; color: var(--color-text-muted);"></i>
-                        <p style="margin-top: 1rem; color: var(--color-text-muted);">No extensions found in this category.</p>
+                        <p style="margin-top: 1rem; color: var(--color-text-muted);">No extensions found.</p>
                     </div>
                 `;
                 return;
             }
+
+            // Optional: Group by type if 'All' is selected? 
+            // For now, just flat list as before, relying on chips/badges.
 
             grid.innerHTML = plugins.map(p => `
                 <div class="extension-card">
@@ -205,9 +172,14 @@
                         <div class="card-title-area">
                             <div class="extension-title">
                                 ${p.name}
-                                ${p.verified ? '<i class="fas fa-certificate verified-badge" title="Verified Publisher"></i>' : ''}
+                                ${p.verified ? '<i class="fas fa-certificate verified-badge" title="Official/Bundled"></i>' : ''}
                             </div>
-                            <a href="#" class="author-link">${p.author}</a>
+                            <div style="display:flex; align-items:center; gap:8px;">
+                                <a href="#" class="author-link">${p.author}</a>
+                                ${p.type === 'bundled'
+                    ? '<span style="font-size:10px; background:rgba(99,102,241,0.1); color:var(--color-primary); padding:2px 6px; border-radius:4px;">BUNDLED</span>'
+                    : '<span style="font-size:10px; background:rgba(16,185,129,0.1); color:var(--color-success); padding:2px 6px; border-radius:4px;">INSTALLED</span>'}
+                            </div>
                         </div>
                     </div>
                     
@@ -215,16 +187,13 @@
 
                     <div class="card-stats">
                         <span class="stat-item"><i class="fas fa-download"></i> ${p.downloads}</span>
-                        <span class="stat-item"><i class="fas fa-star" style="color:#fbbf24;"></i> 4.9</span>
-                        <span class="stat-item">v1.0.0</span>
+                        <span class="stat-item"><i class="fas fa-star" style="color:#fbbf24;"></i> 5.0</span>
                     </div>
 
                     <div class="extension-actions">
-                        <button class="${p.enabled ? 'btn-manage' : 'btn-install'}" 
-                                onclick="togglePlugin('${p.id}')">
-                            ${p.enabled ? 'Manage' : 'Install'}
+                        <button class="btn-manage" onclick="togglePlugin('${p.id}')">
+                            Manage
                         </button>
-                        <button class="btn-icon" style="width:32px; height:32px; font-size:14px;"><i class="fas fa-ellipsis-h"></i></button>
                     </div>
                 </div>
             `).join('');

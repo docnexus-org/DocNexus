@@ -89,6 +89,67 @@ def inject_global_context():
 def get_version():
     return jsonify({'version': VERSION})
 
+@app.route('/api/plugins')
+def get_plugins():
+    """
+    Return list of available plugins (Bundled and Installed).
+    Scans filesystem similar to loader.py to find plugin folders.
+    """
+    from docnexus.core.loader import get_plugin_paths
+    
+    plugins = []
+    seen_ids = set()
+    
+    paths = get_plugin_paths()
+    for base_path in paths:
+        if not base_path.exists():
+            continue
+            
+        # Determine category based on path
+        # Bundled are usually in 'docnexus/plugins' or 'docnexus/plugins_dev'
+        is_bundled = 'docnexus' in str(base_path).lower() and ('plugins' in base_path.name or 'plugins_dev' in base_path.name)
+        category_label = 'bundled' if is_bundled else 'installed'
+        
+        for item in base_path.iterdir():
+            if item.is_dir() and (item / 'plugin.py').exists():
+                plugin_id = item.name
+                if plugin_id in seen_ids:
+                    continue
+                seen_ids.add(plugin_id)
+                
+                # Metadata extraction (simple)
+                display_name = plugin_id.replace('_', ' ').title()
+                desc = "No description provided."
+                
+                # Try to read docstring from plugin.py? 
+                # Or just basic info for now.
+                # If 'word_export', name it nicely
+                if plugin_id == 'word_export':
+                    display_name = "Word Export Pro"
+                    desc = "Exports documentation to Microsoft Word (.docx) with TOC and styles."
+                elif plugin_id == 'auth':
+                     display_name = "Authentication"
+                     desc = "User management and login system."
+                elif plugin_id == 'hello_world':
+                     display_name = "Hello World"
+                     desc = "Example plugin demonstrating UI slots."
+                
+                plugins.append({
+                    'id': plugin_id,
+                    'name': display_name,
+                    'author': 'DocNexus Core' if is_bundled else 'User',
+                    'downloads': '-',
+                    'category': 'tool',
+                    'tags': [category_label], # used for filtering in UI
+                    'desc': desc,
+                    'icon': 'fa-plug',
+                    'enabled': True, # Assume enabled if present for now
+                    'verified': is_bundled,
+                    'type': category_label # 'bundled' or 'installed'
+                })
+                
+    return jsonify(plugins)
+
 # Note: We do NOT set MAX_CONTENT_LENGTH here because:
 # 1. Form-encoded data can be 2-3x larger than actual file content
 # 2. We validate actual file/content size at the application level instead
