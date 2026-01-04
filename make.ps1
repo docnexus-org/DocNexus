@@ -18,7 +18,13 @@ if ($Command -eq "help") {
     exit
 }
 
-& $Python $BuildScript $Command
+if ($Command -eq "test") {
+    # Extract additional arguments for the test runner
+    $TestArgs = $args
+    & $Python "$ScriptDir\scripts\run_tests.py" @TestArgs
+} else {
+    & $Python $BuildScript $Command
+}
 if ($LASTEXITCODE -ne 0) {
     Write-Error "Build script failed with exit code $LASTEXITCODE"
 }

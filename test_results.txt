@@ -1,0 +1,44 @@
+Test Run: 2026-01-04 07:49:01
+========================================
+test_build_pipeline (test_features.TestFeatures.test_build_pipeline)
+Test building a pipeline from registered features. ... ok
+test_feature_manager_refresh (test_features.TestFeatures.test_feature_manager_refresh)
+Test that FeatureManager pulls algorithms from registry. ... ok
+test_pipeline_execution (test_features.TestFeatures.test_pipeline_execution)
+Test that a pipeline executes steps in order. ... ok
+test_register_invalid_plugin (test_loader.TestPluginRegistry.test_register_invalid_plugin) ... ok
+test_register_plugin (test_loader.TestPluginRegistry.test_register_plugin) ... ok
+test_register_slot (test_loader.TestPluginRegistry.test_register_slot) ... ok
+test_singleton_behavior (test_loader.TestPluginRegistry.test_singleton_behavior) ... ok
+test_dummy_plugin_loading (test_plugin_integration.TestPhase1Integration.test_dummy_plugin_loading)
+Verify that dummy_plugin loads and registers features correctly. ... ok
+test_initialization (test_registry.TestRegistry.test_initialization) ... ok
+test_invalid_registration (test_registry.TestRegistry.test_invalid_registration) ... ok
+test_missing_metadata (test_registry.TestRegistry.test_missing_metadata) ... ok
+test_register_and_get (test_registry.TestRegistry.test_register_and_get) ... ok
+test_singleton (test_registry.TestRegistry.test_singleton) ... ok
+
+----------------------------------------------------------------------
+Ran 13 tests in 0.019s
+
+OK
+
+========================================
+Coverage Report:
+Name                                          Stmts   Miss   Cover   Missing
+----------------------------------------------------------------------------
+docnexus\__init__.py                              4      0 100.00%
+docnexus\app.py                                1078    925  14.19%   33-35, 45-47, 54-56, 63-72, 91-96, 111-114, 121, 155-158, 162-164, 172-176, 190-195, 232-250, 296-367, 371-702, 710-728, 736-787, 791-819, 824-828, 837-860, 864-896, 904-955, 960-966, 971-973, 989-1031, 1035-1048, 1054-1084, 1090-1190, 1195-1273, 1277-1291, 1296-1577, 1582-1634, 1639, 1648-1667, 1672-1714, 1719-1741, 1746-1755, 1760-1793, 1798-1837, 1842-1859, 1864-1882, 1887-1914, 1924, 1929-1958, 1961
+docnexus\cli.py                                  46     46   0.00%   6-113
+docnexus\core\__init__.py                         0      0 100.00%
+docnexus\core\loader.py                          52      8  84.62%   25, 42, 46-48, 65, 92-93
+docnexus\core\plugin_interface.py                14      4  71.43%   16, 24, 31, 38
+docnexus\core\registry.py                        49      8  83.67%   55, 76-77, 83-87
+docnexus\core\renderer.py                        14      9  35.71%   10-53, 57-60
+docnexus\features\registry.py                    66      6  90.91%   40-41, 47, 64, 78-79
+docnexus\features\smart_convert.py              128    115  10.16%   7-32, 41-43, 48-53, 57-60, 64-67, 71-72, 83-158, 162, 166-180
+docnexus\features\standard.py                   302    292   3.31%   6-11, 15-19, 23-26, 30-36, 40-145, 149-183, 187-387, 391-433
+docnexus\plugins_dev\dummy_plugin\plugin.py      23      7  69.57%   7-9, 26, 38-40
+docnexus\version_info.py                          1      0 100.00%
+----------------------------------------------------------------------------
+TOTAL                                          1777   1420  20.09%
