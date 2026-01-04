@@ -141,7 +141,7 @@ def kill_existing_process(app_name):
 
 def build():
     """Build the standalone executable."""
-    # Get Version (duplicate logic, but needed for name)
+    # Get Version and Sync to VERSION file
     try:
         init_file = PROJECT_ROOT / "docnexus" / "version_info.py"
         with open(init_file) as f:
@@ -149,7 +149,15 @@ def build():
                 if "__version__" in line:
                     version = line.split("'")[1]
                     break
-    except Exception:
+        
+        # Auto-update VERSION file to match code
+        version_file = PROJECT_ROOT / "VERSION"
+        with open(version_file, "w") as vf:
+            vf.write(version)
+        log(f"Synced VERSION file to {version}", Colors.OKBLUE)
+        
+    except Exception as e:
+        log(f"Warning: Could not sync version: {e}", Colors.WARNING)
         version = "0.0.0"
     app_name = f"DocNexus_v{version}"
     

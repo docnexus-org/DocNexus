@@ -7,160 +7,79 @@ This document describes the standard Python project structure for DocNexus.
 ```
 DocNexus/
 ├── docnexus/                 # Main application package
-│   ├── __init__.py            # Package initialization & version
+│   ├── __init__.py            # Package initialization
 │   ├── version_info.py        # Single Source of Truth for Version
 │   ├── app.py                 # Flask application setup
 │   ├── cli.py                 # Command-line interface
 │   ├── core/                  # Core functionality
+│   │   ├── loader.py          # Plugin Loader & DI
 │   │   └── renderer.py        # Markdown rendering engine
 │   ├── features/              # Feature modules
-│   │   ├── registry.py        # Feature registration
-│   │   ├── standard.py        # Standard features (TOC, etc.)
-│   │   └── smart_convert.py  # Experimental features
-│   └── templates/             # HTML templates
-│       ├── components/        # Reusable UI components (header_brand, settings)
-│       ├── index.html         # File browser
-│       ├── view.html          # Document viewer
-│       └── docs.html          # Documentation viewer
+│   │   ├── registry.py        # Plugin & Feature Registry
+│   │   ├── standard.py        # Standard features
+│   │   └── smart_convert.py   # Experimental features
+│   ├── plugins/               # Bundled Plugins (Word Export, Auth, etc.)
+│   └── templates/             # HTML templates (Jinja2)
 │
 ├── docs/                      # Project documentation
 │   ├── README.md              # Documentation index
 │   ├── USER_GUIDE.md          # User manual
-│   ├── BUILD.md               # Build instructions
-│   ├── DEPLOYMENT_CHECKLIST.md
-│   ├── PRODUCTION_SUMMARY.md
-│   ├── RELEASE_NOTES_v1.0.0.md
-│   ├── CHANGELOG.md           # Version history
-│   ├── VERSION.md             # Version tracking
-│   └── VIBRANT_UPDATE.md      # UI updates
+│   ├── DOCNEXUS_ARCHITECTURE.md # Architecture deep dive
+│   ├── PLUGIN_DEV_GUIDE.md    # Plugin development guide
+│   └── [various guides...]
 │
-├── examples/                  # Sample markdown files
-│   ├── sample.md
-│   ├── 45CPS_EXECUTIVE_BRIEFING.md
-│   └── [more samples...]
+├── scripts/                   # Build & Automation Scripts
+│   ├── build.py               # Master build script (Python)
+│   └── run_tests.py           # Test runner
 │
-├── releases/                  # Distribution packages
-│   ├── v1.0.0/               # Version-specific build
-│   │   ├── DocNexus.exe    # Standalone executable
-│   │   ├── README.md
-│   │   └── examples/         # Samples
-│   ├── DocNexus-v1.0.0-Windows-x64.zip
-│   ├── CHECKSUMS.txt         # SHA256 verification
-│   └── README.md             # Release notes
+├── tests/                     # Test Suite
+│   ├── fixtures/              # Test assets
+│   └── output/                # Test artifacts (gitignored)
 │
 ├── build/                     # Build artifacts (gitignored)
-├── dist/                      # PyInstaller output (gitignored)
-├── .venv/                     # Virtual environment (gitignored)
+│   ├── output/                # Final Exe & Dist
+│   ├── venv/                  # Virtual Environment
+│   └── temp/                  # PyInstaller temp
 │
+├── make.cmd                   # Windows Build Wrapper (Powershell)
+├── make.ps1                   # Powershell Entry Point
+├── VERSION                    # Version File (Synced via build)
 ├── README.md                  # Project overview
-├── LICENSE                    # MIT License
+├── LICENSE                    # AGPLv3 License
 ├── requirements.txt           # Python dependencies
 ├── pyproject.toml            # Modern packaging (PEP 518)
-├── setup.py                   # Legacy setuptools
-├── MANIFEST.in               # Package data rules
-├── run.py                     # Development server
-├── start.bat                  # Windows launcher
-├── DocNexus.spec           # PyInstaller config
 └── .gitignore                # Git exclusions
-
 ```
 
-## Key Files
+## Build Process (The `make` system)
 
-### Packaging Configuration
+We utilize a unified `make.cmd` wrapper around `scripts/build.py` for all lifecycle tasks.
 
-- **pyproject.toml** - Modern Python packaging standard (PEP 518)
-  - Build system configuration
-  - Project metadata
-  - Dependencies
-  - Entry points
-  - Tool configurations (black, pytest)
-
-- **setup.py** - Legacy setuptools configuration
-  - Backward compatibility
-  - Dynamic version reading
-  - Package discovery
-
-- **MANIFEST.in** - Package data inclusion rules
-  - Templates, documentation, samples
-  - Excluded files (build artifacts)
-
-- **requirements.txt** - Runtime dependencies
-  - Flask, markdown, Pygments, pymdown-extensions
-
-### Application Entry Points
-
-- **run.py** - Development server
-  - Direct Flask execution
-  - Debug mode enabled
-  - Auto-reload on changes
-
-- **docnexus/cli.py** - Command-line interface
-  - Production entry point
-  - Command-line argument parsing
-  - Installed as `docnexus` command
-
-### Build Configuration
-
-- **DocPresent.spec** - PyInstaller specification
-  - Single-file executable configuration
-  - Data file collection
-  - Hidden imports for Flask/markdown
-  - UPX compression settings
-
-## Installation Methods
-
-### 1. End Users (Pre-built Executable)
-```bash
-# Download from releases/
-unzip DocNexus-v1.1.2-Windows-x64.zip
-cd v1.1.2
-./DocNexus.exe
+### 1. Setup
+```powershell
+.\make.cmd setup  # Creates venv, installs requirements
 ```
 
-### 2. Developers (Source Installation)
-```bash
-# Clone and install
-git clone [repository]
-cd DocPresent
-python -m venv .venv
-source .venv/bin/activate  # Windows: .venv\Scripts\activate
-pip install -r requirements.txt
-python run.py
+### 2. Run from Source
+```powershell
+.\make.cmd run    # Starts local Flask development server
 ```
 
-### 3. Package Installation (pip)
-```bash
-# Install from source
-pip install -e .
-
-# Or from PyPI (if published)
-pip install docnexus
-
-# Run installed command
-docnexus
+### 3. Testing
+```powershell
+.\make.cmd test   # Runs unittest suite
 ```
 
-## Build Process
-
-### Development Build
-```bash
-python run.py
+### 4. Build Standalone Executable
+```powershell
+.\make.cmd build  # Uses PyInstaller to create frozen EXE in build/output
 ```
+*   **Version Sync**: The build process automatically reads `docnexus/version_info.py` and updates the `VERSION` file.
+*   **Asset Bundling**: Templates, static assets, and bundled plugins are collected.
 
-### Production Executable
-```bash
-pip install pyinstaller
-pyinstaller DocPresent.spec --clean
-# Output: dist/DocPresent.exe
-```
-
-### Python Package
-```bash
-# Build wheel
-python -m build
-
-# Output: dist/docpresent-1.0.0-py3-none-any.whl
+### 5. Launch
+```powershell
+.\make.cmd launch # Runs the certified build from output folder
 ```
 
 ### Create Release
@@ -231,6 +150,6 @@ This project follows Python packaging best practices:
 
 ---
 
-**Last Updated:** December 16, 2025  
-**Version:** 1.1.2  
-**Structure:** Standard Python Package
+**Last Updated:** January 04, 2026  
+**Version:** 1.2.4  
+**Structure:** Hybrid (Flask App + PyInstaller Build)

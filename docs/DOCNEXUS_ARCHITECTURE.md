@@ -9,8 +9,9 @@ We adhere to a **Single Source of Truth (SSOT)** robust versioning strategy to e
 
 ### The Source of Truth
 *   **File**: `docnexus/version_info.py`
-*   **Content**: `__version__ = '1.2.0'`
+*   **Content**: `__version__ = '1.2.x'`
 *   **Role**: This is the *only* place the version number is hardcoded.
+*   **Sync**: The root `VERSION` file is automatically updated from this source during build.
 
 ### The Propagation Flow
 1.  **Package Init**: `docnexus/__init__.py` imports `__version__` from `version_info.py`.
