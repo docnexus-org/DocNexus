@@ -2,8 +2,15 @@ import urllib.request
 import urllib.error
 import json
 import sys
+from pathlib import Path
+import argparse
 
-URL = "http://localhost:8000/api/export/docx"
+# Add project root to sys.path
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(PROJECT_ROOT))
+
+from tests.config import BASE_URL
+URL = f"{BASE_URL}/api/export/docx"
 HTML_CONTENT = """
 <div id="documentContent">
     <div class="toc-container">

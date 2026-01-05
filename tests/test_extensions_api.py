@@ -1,9 +1,11 @@
 import urllib.request
+import requests
 import json
 import sys
+from tests.config import BASE_URL
 
-URL = "http://localhost:8000/api/plugins"
-VERSION_URL = "http://localhost:8000/api/version"
+URL = f"{BASE_URL}/api/plugins"
+VERSION_URL = f"{BASE_URL}/api/version"
 
 def test_api():
     print(f"Testing {URL}...")
