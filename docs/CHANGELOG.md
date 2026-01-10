@@ -9,6 +9,7 @@ All notable changes to this project will be documented in this file.
 - **PDF Export**: Fixed a `SyntaxError` in the PDF Export plugin that prevented it from loading.
 - **Visuals**: Updated toast notifications in extensions page to use a premium, theme-aware design.
 - **Cleanup**: Resolved JavaScript syntax errors in the Extensions Marketplace that caused UI hangs.
+- **Documentation**: Comprehensive update of README, Architecture, and Developer guides to reflect v1.2.4 changes.
 ### Added
 - **Toast Notifications**: Replaced browser alerts with a modern, non-blocking toast notification system (Success/Error/Info) in the Extensions Marketplace.
 - **Professional UI**: Updated "Extension Required" and "Uninstall Confirmation" modals to use a clean, solid "Professional Card" aesthetic (removing glassmorphism) with refined spacing and typography.

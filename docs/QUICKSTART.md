@@ -79,13 +79,13 @@ ptw
 
 ### Building
 ```bash
-# Build Python package
-python -m build
+# Build standalone executable (Windows)
+.\make.ps1 build
 
-# Build executable
-pyinstaller DocNexus.spec
+# Build standalone executable (Linux/Mac)
+make build
 
-# Both will create artifacts in dist/
+# Output will be in build/output/
 ```
 
 ### Common Tasks

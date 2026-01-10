@@ -7,20 +7,20 @@ We provide a consistent way to run tests using the `make.cmd` utility.
 ### Basic Usage
 
 Run all tests with coverage report:
-```cmd
-.\make.cmd test
+```powershell
+.\make.ps1 test
 ```
 
 ### Advanced Usage
 
 Run a specific test module:
-```cmd
-.\make.cmd test tests.test_features
+```powershell
+.\make.ps1 test tests.test_features
 ```
 
 Run a specific test file:
-```cmd
-.\make.cmd test tests/test_plugin_integration.py
+```powershell
+.\make.ps1 test tests/test_plugin_integration.py
 ```
 
 ### Test Results
@@ -35,7 +35,7 @@ Every test run generates a `test_results.txt` file in the project root containin
 1.  Create a new test file in `tests/` starting with `test_`.
 2.  Import `unittest`.
 3.  Define a class inheriting from `unittest.TestCase`.
-4.  Run it using `.\make.cmd test tests.test_your_file`.
+4.  Run it using `.\make.ps1 test tests.test_your_file`.
 
 ## Test Infrastructure
 

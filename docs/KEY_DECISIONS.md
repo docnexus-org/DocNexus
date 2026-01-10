@@ -57,3 +57,17 @@ A singleton class responsible for:
 ## 5. UI/UX
 *   **Settings > Extensions**: A card-based layout showing Available vs Installed.
 *   **Status**: "Enabled", "Disabled", "Missing Dependency" (e.g. "Click to download PDF Engine").
+
+# Plugin System Architecture (v1.2.4 Refinement)
+
+## 1. Shift to "Bundled Passive" Model
+In v1.2.0, we planned to download binaries like `wkhtmltopdf` on demand.
+In v1.2.4, we pivoted to a **Bundled Passive** model:
+1.  **Bundled**: Core tools (PDF/Word export) are critical. We now bundle `xhtml2pdf` and `docx` directly in the executable.
+2.  **Passive**: Even bundled code is "hidden" behind the Plugin abstraction. The core `app.py` doesn't import them.
+3.  **State Management**: `PluginState` allows users to disable bundled features, keeping the runtime footprint minimal if unused.
+
+## 2. Why?
+*   **Reliability**: Removing reliance on external downloads (CDNs, network issues) ensures the app "just works" offline.
+*   **Consistency**: We control the exact version of the export engines.
+*   **Simplicity**: Users don't need to "Install" basic features; they just Toggle them.

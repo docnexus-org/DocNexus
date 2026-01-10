@@ -9,7 +9,7 @@ This folder (`scripts/`) contains core utility scripts used for building and tes
     - Kills any existing process occupying the test port (Default: 8000) to ensure a clean environment.
     - Invokes `pytest` to discover and run all tests in the `tests/` directory.
     - Pipes output to both the console and `tests/latest_results.log`.
-- **Usage**: `python scripts/run_tests.py` (or via `make.cmd test`)
+- **Usage**: `python scripts/run_tests.py` (or via `.\make.ps1 test`)
 
 ## 2. `build.py`
 **Use Case:** The main build script for creating the standalone executable (Frozen App).
@@ -20,7 +20,7 @@ This folder (`scripts/`) contains core utility scripts used for building and tes
         - Excludes `plugins_dev` (Development).
     - Collects hidden imports for dynamic plugins (e.g., `xhtml2pdf`, `reportlab`).
     - managing assets and version resources.
-- **Usage**: `python scripts/build.py` (or via `make.cmd build`)
+- **Usage**: `python scripts/build.py` (or via `.\make.ps1 build`)
 
 ## Other Utilities (Moved)
 - **Asset Generator**: Moved to `tools/asset_generator.py`. Used for generating favicon/icons from a master logo.

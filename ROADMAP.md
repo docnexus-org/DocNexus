@@ -17,6 +17,10 @@ We are now focusing on enriching the default experience and handling technical d
 *   **Advanced Features**:
     *   **RAG / Chat-with-Doc**: A local-first AI plugin to chat with the open document.
     *   **PDF Export v2**: Refine the export processing for better layout fidelity.
+    *   **Smart Conversion (Experimental)**:
+        *   **ASCII to Table**: Convert ASCII art tables to Markdown tables.
+        *   **SIP Signaling**: Convert text-based flows to Mermaid sequence diagrams.
+        *   **Network Topology**: Convert text description to node diagrams.
 
 ## 🛠 Phase 3: The Pipeline Architecture (Inspired by UnifiedJS)
 We will transition from monolithic rendering to a `Middleware` pipeline pattern, treating documents as data streams.

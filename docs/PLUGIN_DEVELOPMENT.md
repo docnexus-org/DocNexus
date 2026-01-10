@@ -38,8 +38,23 @@ docnexus/
 
 ## 3. The `plugin.py` Contract
 
-The `plugin.py` file is the entry point. It **must** expose a `get_features()` function.
+The `plugin.py` file is the entry point. It **must** define a `PLUGIN_METADATA` dictionary and expose a `get_features()` function.
 
+## 3.1 Metadata (Required)
+The `PLUGIN_METADATA` dictionary is used by the **Extensions Marketplace** to display your plugin and by the **Loader** to determine default state.
+
+```python
+PLUGIN_METADATA = {
+    'name': 'My Plugin',
+    'description': 'A short description for the marketplace.',
+    'category': 'editor',  # Options: 'editor', 'export', 'theme', 'utility'
+    'icon': 'fa-puzzle-piece', # FontAwesome class (e.g., fa-file-pdf)
+    'preinstalled': False,     # Set True ONLY if bundled with Core
+    'version': '1.0.0'
+}
+```
+
+## 3.2 The `get_features()` Function
 ### `get_features()`
 Returns a list of `Feature` objects.
 
