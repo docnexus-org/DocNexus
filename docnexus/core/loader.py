@@ -97,6 +97,50 @@ def load_single_plugin(name: str, path: Path, registry_instance=None) -> None:
     it shares the same registry and class definitions as the core app.
     """
     try:
+        from docnexus.core.state import PluginState
+        state = PluginState.get_instance()
+        
+        # 1. Peek at metadata to determine 'preinstalled' status (Cheap/Fast scan needed?)
+        # For now, we load proper metadata via import.
+        # But we must be careful not to execute heavy code.
+        # We rely on 'plugin.py' defining PLUGIN_METADATA at top level.
+        
+        # We create a dummy spec to check metadata BEFORE fully "registering" via loader?
+        # Actually, if we just import it to read metadata, we might trigger side effects.
+        # Safest way: READ status from state.
+        # If State has NO RECORD of this plugin, we need to default it.
+        # How do we know default? We MUST read the file.
+        # We use AST or importlib for metadata.
+        
+        is_enabled = False
+        
+        # Determine if already tracked
+        if state.is_plugin_in_registry(name):
+             is_enabled = state.is_plugin_installed(name)
+        else:
+             # Not in registry. Determine default via import.
+             try:
+                 # Minimal import for metadata
+                 # import importlib.util  <-- REMOVE (Uses global)
+                 temp_spec = importlib.util.spec_from_file_location(f"temp_meta_{name}", str(path))
+                 if temp_spec and temp_spec.loader:
+                     temp_mod = importlib.util.module_from_spec(temp_spec)
+                     temp_spec.loader.exec_module(temp_mod)
+                     meta = getattr(temp_mod, 'PLUGIN_METADATA', {})
+                     is_preinstalled = meta.get('preinstalled', False)
+                     
+                     # Register default state
+                     state.set_plugin_installed(name, is_preinstalled)
+                     is_enabled = is_preinstalled
+             except Exception as meta_err:
+                 logger.warning(f"Metadata scan failed for {name}: {meta_err}. Defaulting to DISABLED.")
+                 state.set_plugin_installed(name, False)
+                 is_enabled = False
+        
+        if not is_enabled:
+             logger.info(f"Skipping disabled plugin: {name}")
+             return
+
         logger.info(f"Loading plugin '{name}' from {path}")
         
         # Use a unique name for the module based on file path to avoid conflicts
@@ -137,6 +181,9 @@ def load_single_plugin(name: str, path: Path, registry_instance=None) -> None:
                     count = 0
                     for f in features:
                         try:
+                            # Inject Plugin ID for State tracking
+                            f.meta['plugin_id'] = name
+                            
                             actual_registry.register(f)
                             logger.info(f"Loader: Registered feature '{f.name}' (Type: {f.type}) from {name}. Meta: {f.meta}")
                             count += 1
@@ -168,8 +215,8 @@ def load_plugins(registry_instance=None) -> None:
     logger.error(f"DEBUG: Loader search paths: {[str(p) for p in search_paths]}")
     
     for path in search_paths:
+        logger.info(f"Loader: Scanning path: {path}")
         if path.exists():
-            logger.error(f"DEBUG: Scanning path: {path}")
             load_plugins_from_path(path, registry_instance)
         else:
-             logger.error(f"DEBUG: Search path does not exist: {path}")
+            logger.error(f"Loader: Search path does not exist: {path}")

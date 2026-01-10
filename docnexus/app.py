@@ -70,6 +70,15 @@ else:
 # Create Flask App (SINGLE INSTANCE)
 app = Flask(__name__, **flask_kwargs)
 app.config['TEMPLATES_AUTO_RELOAD'] = True
+app.config['SECRET_KEY'] = 'dev-key-123'
+
+# Disable Caching for Development/Updates
+@app.after_request
+def add_header(r):
+    r.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+    r.headers["Pragma"] = "no-cache"
+    r.headers["Expires"] = "0"
+    return r
 
 # Global Feature Manager (initialized later)
 FEATURES = None
@@ -93,23 +102,27 @@ def get_version():
 @app.route('/api/plugins')
 def get_plugins():
     """
-    Return list of available plugins (Bundled and Installed).
-    Scans filesystem similar to loader.py to find plugin folders.
+    Return list of available plugins using Metadata and Config state.
     """
     from docnexus.core.loader import get_plugin_paths
+    from docnexus.core.state import PluginState
+    import ast
     
+    logger.debug("API: Fetching plugin list (New Architecture)...")
     plugins = []
     seen_ids = set()
+    
+    # Load State
+    state = PluginState.get_instance()
+    installed_ids = state.get_installed_plugins()
     
     paths = get_plugin_paths()
     for base_path in paths:
         if not base_path.exists():
             continue
             
-        # Determine category based on path
-        # Bundled are usually in 'docnexus/plugins' or 'docnexus/plugins_dev'
         is_bundled = 'docnexus' in str(base_path).lower() and ('plugins' in base_path.name or 'plugins_dev' in base_path.name)
-        category_label = 'bundled' if is_bundled else 'installed'
+        origin_label = 'bundled' if is_bundled else 'user'
         
         for item in base_path.iterdir():
             if item.is_dir() and (item / 'plugin.py').exists():
@@ -118,166 +131,168 @@ def get_plugins():
                     continue
                 seen_ids.add(plugin_id)
                 
-                # Metadata extraction (simple)
-                display_name = plugin_id.replace('_', ' ').title()
-                desc = "No description provided."
+                # Default Metadata
+                display_name = plugin_id.title()
+                desc = "No description."
+                category = "tool"
+                icon = "fa-plug"
+                preinstalled = False
                 
-                # Try to read docstring from plugin.py? 
-                # Or just basic info for now.
-                # If 'word_export', name it nicely
-                # Check for installer capability
-                has_installer = (item / 'installer.py').exists()
-                
-                # Check installation status
-                is_installed = True # Default
-                if has_installer:
-                    # If it has an installer, check if "activated"
-                    # Convention: If bundled & installer, check for ENABLED marker
-                    if is_bundled:
-                        is_installed = (item / 'ENABLED').exists()
+                # Robust Regex Metadata Extraction
+                try:
+                    import re
+                    import ast
+                    
+                    plugin_file_path = item / 'plugin.py'
+                    with open(plugin_file_path, 'r', encoding='utf-8') as f:
+                        content = f.read()
+                        
+                    # Regex to find PLUGIN_METADATA = { ... }
+                    # Matches keys and values broadly, expecting valid python dict syntax
+                    match = re.search(r'PLUGIN_METADATA\s*=\s*({[^}]+})', content, re.DOTALL)
+                    
+                    if match:
+                        dict_str = match.group(1)
+                        # clean up any potential trailing commas or comments if simple regex captured them?
+                        # actually ast.literal_eval is strict.
+                        # If regex is too greedy, it might fail.
+                        # Let's try to parse the match.
+                        meta = ast.literal_eval(dict_str)
+                        
+                        display_name = meta.get('name', display_name)
+                        desc = meta.get('description', desc)
+                        category = meta.get('category', category)
+                        icon = meta.get('icon', icon)
+                        preinstalled = meta.get('preinstalled', False)
                     else:
-                        is_installed = True # User plugins (in external dir) are typically installed by definition
+                        logger.warning(f"No PLUGIN_METADATA found in {plugin_id}")
+                        
+                except Exception as e:
+                    logger.warning(f"Failed to regex-parse metadata for {plugin_id}: {e}")
                 
-                if plugin_id == 'word_export':
-                    display_name = "Word Export Pro"
-                    desc = "Exports documentation to Microsoft Word (.docx) with TOC and styles."
-                elif plugin_id == 'pdf_export':
-                    display_name = "PDF Export"
-                    desc = "Exports documentation to PDF using pure Python engine."
-                elif plugin_id == 'auth':
-                     display_name = "Authentication"
-                     desc = "User management and login system."
-                elif plugin_id == 'hello_world':
-                     display_name = "Hello World"
-                     desc = "Example plugin demonstrating UI slots."
-                
+                # Determine Installed Status
+                if preinstalled:
+                     is_installed = True
+                     has_installer = False # Preinstalled cannot be removed
+                else:
+                    is_installed = plugin_id in installed_ids
+                    has_installer = True # Can be managed
+
+                if plugin_id == 'pdf_export':
+                     logger.info(f"API: get_plugins found pdf_export. State says installed={is_installed} (Instance {id(state)})")
+                # Priority (Config read)
+                priority_list = CONFIG.get('plugin_priority', [])
+                is_priority = plugin_id in priority_list
+
                 plugins.append({
                     'id': plugin_id,
                     'name': display_name,
                     'author': 'DocNexus Core' if is_bundled else 'User',
                     'downloads': '-',
-                    'category': 'tool',
-                    'tags': [category_label],
-                    'description': desc, # Use 'description' matching UI update
-                    'icon': 'fa-file-pdf' if 'pdf' in plugin_id else ('fa-file-word' if 'word' in plugin_id else 'fa-plug'),
+                    'category': category,
+                    'tags': [origin_label, category],
+                    'description': desc,
+                    'icon': icon,
                     'installed': is_installed,
                     'can_install': has_installer,
-                    'type': category_label 
+                    'type': origin_label,
+                    'is_priority': is_priority
                 })
                 
     return jsonify(plugins)
 
 @app.route('/api/plugins/install/<plugin_id>', methods=['POST'])
-def install_plugin(plugin_id):
-    """
-    Trigger the installer.py for a specific plugin.
-    """
-    from docnexus.core.loader import get_plugin_paths
+def install_plugin_api(plugin_id):
+    logger.info(f"API: Received install request for {plugin_id}")
+    from docnexus.core.state import PluginState
+    state = PluginState.get_instance()
     
-    # helper to find plugin dir
-    target_path = None
-    paths = get_plugin_paths()
-    for base_path in paths:
-        if not base_path.exists(): continue
-        candidate = base_path / plugin_id
-        if candidate.exists() and candidate.is_dir():
-            target_path = candidate
-            break
-            
-    if not target_path:
-        return jsonify({'error': f'Plugin {plugin_id} not found'}), 404
-        
-    installer_path = target_path / 'installer.py'
-    if not installer_path.exists():
-        return jsonify({'error': 'Plugin does not have an installer'}), 400
-        
+    # 1. Update State
     try:
-        # Load installer module dynamically
-        import importlib.util
-        spec = importlib.util.spec_from_file_location(f"installer_{plugin_id}", str(installer_path))
-        module = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(module)
-        
-        # Check if install function exists
-        if hasattr(module, 'install'):
-            success, message = module.install()
-            if success:
-                # Reload registry to activate new features immediately
-                try:
-                    logger.info(f"Hot-reload: Starting load_single_plugin for {plugin_id}")
-                    from docnexus.core.loader import load_single_plugin
-                    load_single_plugin(plugin_id, target_path / 'plugin.py')
-                    logger.info(f"Hot-reload: Plugin loaded. Refreshing FeatureManager...")
-                    # Refresh the FeatureManager to pick up the new export handler
-                    FEATURES.refresh()
-                    logger.info(f"Hot-reload: FeatureManager refreshed. Current features: {[f.name for f in FEATURES._features]}")
-                except Exception as load_err:
-                     logger.error(f"Failed to hot-reload plugin: {load_err}", exc_info=True)
-
-                return jsonify({'success': True, 'message': message})
-            else:
-                return jsonify({'error': message}), 500
-        else:
-            return jsonify({'error': 'Installer module missing install() function'}), 500
+        if state.set_plugin_installed(plugin_id, True):
+            logger.info(f"API: Successfully enabled {plugin_id}")
             
+            # 2. Reload Plugin & Refresh Features
+            try:
+                from docnexus.core.loader import load_single_plugin, get_plugin_paths
+                from docnexus.features.registry import PluginRegistry
+                
+                # Retrieve path for this plugin
+                # We need to find where it is.
+                found_path = None
+                for base in get_plugin_paths():
+                    candidate = base / plugin_id / 'plugin.py'
+                    if candidate.exists():
+                        found_path = candidate
+                        break
+                
+                if found_path:
+                    load_single_plugin(plugin_id, found_path, PluginRegistry())
+                    FEATURES.refresh()
+                    logger.info(f"API: Reloaded plugin {plugin_id} and refreshed features.")
+                else:
+                    logger.warning(f"API: Could not find path for {plugin_id} to reload.")
+                    
+            except Exception as reload_err:
+                logger.error(f"API: Reload failed: {reload_err}")
+                
+            return jsonify({'message': f'Plugin {plugin_id} enabled successfully.'})
+        else:
+            logger.error(f"API: Failed to save configuration for {plugin_id}")
+            return jsonify({'error': 'Failed to save configuration.'}), 500
     except Exception as e:
+        logger.error(f"API: Exception during install of {plugin_id}: {e}")
         return jsonify({'error': str(e)}), 500
 
 @app.route('/api/plugins/uninstall/<plugin_id>', methods=['POST'])
-def uninstall_plugin(plugin_id):
-    """
-    Uninstall/Disable a plugin by removing its ENABLED marker or running uninstall script.
-    """
-    from docnexus.core.loader import get_plugin_paths
+def uninstall_plugin_api(plugin_id):
+    logger.info(f"API: Received uninstall request for {plugin_id}")
+    from docnexus.core.state import PluginState
+    state = PluginState.get_instance()
     
-    target_path = None
-    paths = get_plugin_paths()
-    for base_path in paths:
-        if not base_path.exists(): continue
-        candidate = base_path / plugin_id
-        if candidate.exists() and candidate.is_dir():
-            target_path = candidate
-            break
+    # 1. Update State
+    try:
+        if state.set_plugin_installed(plugin_id, False):
+            logger.info(f"API: Successfully disabled {plugin_id}")
             
-    if not target_path:
-        return jsonify({'error': f'Plugin {plugin_id} not found'}), 404
-        
-    # Check if uninstall script exists
-    installer_path = target_path / 'installer.py'
-    # Or just check for ENABLED file
-    enabled_file = target_path / 'ENABLED'
-    
-    if enabled_file.exists():
-        try:
-            os.remove(enabled_file)
-            
-            # Hot-Reload: Trigger refresh so FeatureManager sees 'installed=False'
-            # My previous fix in registry.py will update the existing feature state.
+            # 2. Refresh Features (Refresh will see State=False and disable feature)
             try:
-                logger.info(f"Hot-reload: Plugin {plugin_id} disabled. Refreshing FeatureManager...")
-                
-                # Check if we need to reload the module to update the 'installed' flag in memory?
-                # The 'installed' flag is usually read from the file system ON module init.
-                # Just refreshing might not change the in-memory module state if it's already imported.
-                # However, FeatureManager.is_feature_installed checks meta['installed'].
-                # Does the plugin update its own meta dynamically? NO. It's set at creation.
-                # So we MUST reload the module to update the meta.
-                
-                target_plugin_py = target_path / 'plugin.py'
-                from docnexus.core.loader import load_single_plugin
-                load_single_plugin(plugin_id, target_plugin_py)
-                
                 FEATURES.refresh()
-                logger.info("Hot-reload: FeatureManager refreshed.")
+                logger.info(f"API: Refreshed features (Plugin {plugin_id} should be disabled).")
+            except Exception as ref_err:
+                logger.error(f"API: Refresh failed: {ref_err}")
                 
-                return jsonify({'success': True, 'message': 'Plugin disabled successfully.'})
-            except Exception as e:
-                logger.warning(f"Hot-reload uninstall warning: {e}")
-                return jsonify({'success': True, 'message': 'Plugin disabled, restart recommended.'})
-        except Exception as e:
-            return jsonify({'error': f"Failed to disable plugin: {e}"}), 500
+            return jsonify({'message': f'Plugin {plugin_id} disabled successfully.'})
+        else:
+            logger.error(f"API: Failed to save configuration for {plugin_id}")
+            return jsonify({'error': 'Failed to save configuration.'}), 500
+    except Exception as e:
+        logger.error(f"API: Exception during uninstall of {plugin_id}: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/plugins/priority', methods=['GET', 'POST'])
+def manage_priority():
+    """Get or Set plugin priority list."""
+    if request.method == 'POST':
+        try:
+            data = request.get_json()
+            priority_list = data.get('priority', [])
+            if not isinstance(priority_list, list):
+                return jsonify({'error': 'Invalid format, expected list'}), 400
             
-    return jsonify({'error': 'Plugin is not installed/enabled locally.'}), 400
+            CONFIG['plugin_priority'] = priority_list
+            save_config(CONFIG)
+            
+            # Refresh features to apply new priority
+            FEATURES.refresh(priority_list=priority_list)
+            
+            return jsonify({'success': True, 'priority': priority_list})
+        except Exception as e:
+            return jsonify({'error': str(e)}), 500
+    else:
+        return jsonify({'priority': CONFIG.get('plugin_priority', [])})
+
 
 # Note: We do NOT set MAX_CONTENT_LENGTH here because:
 # 1. Form-encoded data can be 2-3x larger than actual file content
@@ -309,7 +324,8 @@ logger.info(f"Application starting - Version {VERSION}")
 
 # Initialize Plugins
 try:
-    logger.info("Initializing Plugin System...")
+    import time
+    logger.info(f"Initializing Plugin System... (Startup Time: {time.time()})")
     
     # Force loader logging to ensure we see plugin discovery
     logging.getLogger('docnexus.core.loader').setLevel(logging.DEBUG)
@@ -428,7 +444,7 @@ FEATURES.register(Feature("SMART_TOPOLOGY", smart.convert_topology_to_mermaid, F
 FEATURES._registry = PluginRegistry()
 # Force debug print to console
 logger.debug(f"DEBUG_STARTUP: Plugins in Registry: {FEATURES._registry.get_all_plugins()}")
-FEATURES.refresh()
+FEATURES.refresh(priority_list=CONFIG.get('plugin_priority', []))
 logger.debug(f"DEBUG_STARTUP: Features in Manager: {[f.name for f in FEATURES._features]}")
 
 

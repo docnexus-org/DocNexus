@@ -203,6 +203,7 @@ def build():
     hidden_imports = [
         "docnexus.version_info",
         "docnexus.features", "docnexus.features.smart_convert",
+        "docnexus.features.registry", "docnexus.features.standard",
         "engineio.async_drivers.threading",
         "pymdownx", "pymdownx.betterem", "pymdownx.superfences",
         "pymdownx.tabbed", "pymdownx.details", "pymdownx.magiclink",

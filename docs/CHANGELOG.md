@@ -2,7 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
-## [v1.2.4] - 2026-01-09
+## [v1.2.4] - 2026-01-10
+### Fixed
+- **Plugin Detection**: Fixed critical regression where Export plugins (Word/PDF) were incorrectly reported as "Missing" even when installed. The issue was due to the backend verifying logic not syncing with the persisted plugin state.
+- **Startup Crash**: Fixed `AttributeError` in `PluginState` and `UnboundLocalError` in `Loader` that caused the application to crash or fail to load plugins at startup.
+- **PDF Export**: Fixed a `SyntaxError` in the PDF Export plugin that prevented it from loading.
+- **Visuals**: Updated toast notifications in extensions page to use a premium, theme-aware design.
+- **Cleanup**: Resolved JavaScript syntax errors in the Extensions Marketplace that caused UI hangs.
 ### Added
 - **Toast Notifications**: Replaced browser alerts with a modern, non-blocking toast notification system (Success/Error/Info) in the Extensions Marketplace.
 - **Professional UI**: Updated "Extension Required" and "Uninstall Confirmation" modals to use a clean, solid "Professional Card" aesthetic (removing glassmorphism) with refined spacing and typography.

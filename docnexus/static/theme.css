@@ -364,6 +364,8 @@ header {
 
 .search-bar:focus-within {
     border-color: var(--color-accent-primary);
+    outline: none;
+    box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
 }
 
 .search-bar i {
@@ -378,6 +380,7 @@ header {
     width: 100%;
     font-family: var(--font-body);
     font-size: 0.95rem;
+    outline: none;
 }
 
 .search-bar input::placeholder {

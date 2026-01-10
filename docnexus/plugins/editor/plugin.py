@@ -95,7 +95,7 @@ def get_features():
     """Register the Editor functionality."""
     return [
         Feature(
-            name="Document Editor",
+            name="Doc Editor",
             type=FeatureType.UI_EXTENSION,
             source="bundled",
             state=None, # Optional
@@ -104,4 +104,12 @@ def get_features():
     ]
 
 # Expose Blueprint for the loader to pick up
-blueprint = editor_bp
+
+# Metadata
+PLUGIN_METADATA = {
+    'name': 'Doc Editor',
+    'description': 'Professional WYSIWYG editor with live markdown preview, advanced formatting, and real-time collaboration tools.',
+    'category': 'editor',
+    'icon': 'fa-edit',
+    'preinstalled': True
+}

@@ -316,3 +316,12 @@ def get_features():
             state=_FeatureState.STANDARD
         )
     ]
+
+# Metadata
+PLUGIN_METADATA = {
+    'name': 'Word Export',
+    'description': 'Exports documentation to Microsoft Word (.docx) with TOC and styles.',
+    'category': 'export',
+    'icon': 'fa-file-word',
+    'preinstalled': True
+}

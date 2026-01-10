@@ -125,19 +125,14 @@ def export_pdf(content_html: str) -> bytes:
 
 def get_features():
     from docnexus.features.registry import Feature, FeatureType, FeatureState
+    from docnexus.core.state import PluginState
     
-    # Check "Enabled" status via marker file
-    is_enabled = ENABLED_FILE.exists()
-    
-    # DEBUG: Print exact status
-    print(f"PDF PLUGIN DEBUG: Checking {ENABLED_FILE} -> Exists: {is_enabled}")
+    # Check "Enabled" status via Config
+    is_enabled = "pdf_export" in PluginState.get_instance().get_installed_plugins()
     
     features = []
     
     # We register the feature but mark it as installed/not installed
-    # If not installed, the UI shows "Install".
-    # Logic in app.py uses this 'installed' meta.
-    
     features.append(
         Feature(
             "pdf_export",
@@ -155,3 +150,12 @@ def get_features():
     )
     
     return features
+
+# Metadata
+PLUGIN_METADATA = {
+    'name': 'PDF Export',
+    'description': 'Converts documentation to professional PDF format with Table of Contents, cover page, and optimized print layout.',
+    'category': 'export',
+    'icon': 'fa-file-pdf',
+    'preinstalled': False
+}

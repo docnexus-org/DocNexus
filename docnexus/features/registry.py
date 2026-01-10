@@ -135,28 +135,69 @@ class FeatureManager:
         """Register a feature manually (Core features)."""
         self._features.append(feature)
 
-    def refresh(self):
-        """Pull features from the attached PluginRegistry."""
+    def refresh(self, priority_list=None):
+        """
+        Re-scan registry and rebuild features list.
+        """
+        logger.info(f"FeatureManager: Refreshing features... (Priority: {priority_list})")
+        self._features = [] # Clear existing features
         if not self._registry:
+            logger.warning("FeatureManager: No registry attached, skipping refresh.")
             return
         
-        logger.info("FeatureManager: Refreshing features from Registry...")
-        # Clear existing plugin features to avoid duplicates (preserving core if mixed, but here simpler)
-        # Actually, self._features grows indefinitely? Let's reset it to safe core state? 
-        # For now, just logging.
         plugins = self._registry.get_all_plugins()
+        
+        # --- PRIORTY SORTING ---
+        if priority_list:
+             # Sort: items in priority list come LAST so they overwrite previous ones in the loop below
+            def get_sort_key(p):
+                # Try multiple attributes for name, robustly
+                p_name = getattr(p, 'plugin_id', getattr(p, 'name', '')) 
+                if p_name in priority_list:
+                    return priority_list.index(p_name) + 1000
+                return 0
+            
+            plugins.sort(key=get_sort_key)
+            logger.debug(f"FeatureManager: Plugins sorted by priority: {[getattr(p, 'name', '?') for p in plugins]}")
+
+        # Get State to sync installed status
+        try:
+            from docnexus.core.state import PluginState
+            state = PluginState.get_instance()
+        except ImportError:
+            state = None
+            logger.warning("FeatureManager: Could not import PluginState. Features will default to installed.")
+
         count = 0
         for plugin in plugins:
             # Duck typing check instead of strict isinstance to survive import/reload cycles
             if hasattr(plugin, 'name') and hasattr(plugin, 'type') and hasattr(plugin, 'handler'):
+                 
+                 # --- STATE CHECK ---
+                 # Use injected plugin_id if available (added in Loader)
+                 plugin_id = getattr(plugin, 'meta', {}).get('plugin_id')
+                 is_preinstalled = getattr(plugin, 'meta', {}).get('preinstalled', False)
+                 
+                 if plugin_id and state and not is_preinstalled:
+                     # Check actual user preference
+                     # Note: is_plugin_installed defaults to False if not in state, 
+                     # but here we only check if EXPLICITLY disabled or missing from enabled set?
+                     # PluginState.is_plugin_installed checks the set.
+                     try:
+                        if not state.is_plugin_installed(plugin_id):
+                            logger.debug(f"FeatureManager: Plugin {plugin_id} is UNINSTALLED. Disabling feature {plugin.name}.")
+                            plugin.meta['installed'] = False
+                        else:
+                            # Ensure it's true if previously set to False (re-enabled)
+                            plugin.meta['installed'] = True
+                     except Exception as state_err:
+                         logger.warning(f"FeatureManager: State check failed for {plugin_id}: {state_err}")
+
                  # Check for existing feature by name
                  existing_idx = next((i for i, f in enumerate(self._features) if f.name == plugin.name), -1)
                  
                  if existing_idx >= 0:
                      # Update/Replace existing feature
-                     # This ensures that if the plugin reloaded with new metadata (e.g. installed=True), 
-                     # we use the latest version.
-                     old_feature = self._features[existing_idx]
                      self._features[existing_idx] = plugin
                      logger.info(f"FeatureManager: Updated feature '{plugin.name}' (State: {plugin.state})")
                  else:
