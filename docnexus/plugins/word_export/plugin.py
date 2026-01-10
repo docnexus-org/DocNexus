@@ -138,7 +138,7 @@ def export_to_word(html_content: str) -> bytes:
     
     # We need a temp dir for downloaded images that persists during conversion
     import tempfile
-    import requests
+    import urllib.request
     from urllib.parse import urlparse
     import shutil
     
@@ -161,22 +161,20 @@ def export_to_word(html_content: str) -> bytes:
                     if path_obj.suffix.lower() == '.svg':
                          raise ValueError("SVG format is not supported by Word.")
 
-                    # Attempt to download external image
-                    response = requests.get(src, timeout=3.0, stream=True)
-                    response.raise_for_status()
-                    
-                    # Check Content-Type for SVG
-                    ctype = response.headers.get('Content-Type', '').lower()
-                    if 'svg' in ctype:
-                         raise ValueError("SVG format is not supported by Word.")
+                    # Attempt to download external image using standard library
+                    req = urllib.request.Request(src, headers={'User-Agent': 'Mozilla/5.0'})
+                    with urllib.request.urlopen(req, timeout=3.0) as response:
+                        # Check Content-Type for SVG
+                        ctype = response.info().get_content_type().lower()
+                        if 'svg' in ctype:
+                             raise ValueError("SVG format is not supported by Word.")
 
-                    # Determine filename
-                    filename = path_obj.name or "image.png"
-                    local_path = temp_dir_path / filename
-                    
-                    with open(local_path, 'wb') as f:
-                        response.raw.decode_content = True
-                        shutil.copyfileobj(response.raw, f)
+                        # Determine filename
+                        filename = path_obj.name or "image.png"
+                        local_path = temp_dir_path / filename
+                        
+                        with open(local_path, 'wb') as f:
+                            shutil.copyfileobj(response, f)
                     
                     new_src = str(local_path)
                     
