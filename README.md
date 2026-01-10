@@ -10,7 +10,7 @@
 DocNexus is an enterprise-grade, open-source documentation platform designed to handle **any** input and deliver **any** output. It transforms static Markdown into a dynamic, executive-ready presentation layer with intelligent diagramming and structure awareness.
 
 ## 🔮 Future Roadmap
-- **Smart Conversions** (v1.1/1.2): Automatic transformation of ASCII tables, SIP diagrams, and network topologies into rich visualizations. [See details](docs/FUTURE_FEATURES.md)
+- **Smart Conversions** (Experimental): Automatic transformation of ASCII tables, SIP diagrams, and network topologies into rich visualizations. [See details](ROADMAP.md)
 - **AI-Powered Generation**: Zero-touch creation of PPTs and document variations.
 - **MCP Server**: Function as a Model Context Protocol (MCP) server to provide documentation context to LLMs.
 - **Plugin Ecosystem**: Extensions for any data source.
@@ -51,10 +51,10 @@ DocNexus doesn't just display text; it understands it.
 ## ⚡ Quick Start
 
 ### 1-Click Run (Windows)
-Double-click `make.cmd` to setup/build/run without PowerShell policy issues.
-```cmd
-make run     # Run from source
-make verify  # Check environment (New!)
+Run `make.ps1` to setup/build/run without PowerShell policy issues.
+```powershell
+.\make.ps1 run     # Run from source
+.\make.ps1 build   # Build executable
 ```
 
 ### CLI Installation
@@ -65,14 +65,14 @@ docnexus start
 
 ### From Source
 ```bash
-git clone https://github.com/omnidoc-org/docnexus.git
+git clone https://github.com/docnexus-org/docnexus.git
 cd docnexus
 pip install -e .
 python run.py
 # or
 ./make.ps1 setup
-./make.ps1 release
-./make.ps1 start
+./make.ps1 build
+./make.ps1 run
 ```
 
 ---
@@ -82,8 +82,7 @@ python run.py
 Detailed guides are available in the `docs/` directory:
 - [User Guide](docs/USER_GUIDE.md)
 - [Architecture Overview](docs/DOCNEXUS_ARCHITECTURE.md)
-- [Plugin Architecture](docs/PLUGIN_ARCHITECTURE.md)
-- [Plugin Development Guide](docs/PLUGIN_DEV_GUIDE.md)
+- [Plugin Development Guide](docs/PLUGIN_DEVELOPMENT.md)
 - [Contributing Guidelines](docs/CONTRIBUTING.md)
 
 ---

@@ -29,10 +29,12 @@ class TestFeatures(unittest.TestCase):
         """Test that FeatureManager pulls algorithms from registry."""
         mock_registry = MagicMock()
         
-        # Create a mock plugin with get_features
+        # Create a mock plugin that acts as a Feature (Duck Typing)
         mock_plugin = MagicMock()
-        feature = Feature("TEST_ALGO", lambda x: x, FeatureState.STANDARD, FeatureType.ALGORITHM)
-        mock_plugin.get_features.return_value = [feature]
+        mock_plugin.name = "TEST_ALGO"
+        mock_plugin.type = FeatureType.ALGORITHM
+        mock_plugin.state = FeatureState.STANDARD
+        mock_plugin.handler = lambda x: x
         
         mock_registry.get_all_plugins.return_value = [mock_plugin]
         

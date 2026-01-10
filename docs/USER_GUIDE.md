@@ -94,16 +94,20 @@ You can export any document for offline sharing:
 
 ---
 
-## Plugins
+## Extensions Marketplace
+DocNexus v1.2+ includes a graphical **Extensions Marketplace**.
 
-DocNexus uses a **Passive Plugin Architecture**. Plugins are located in `docnexus/plugins/`.
+### Managing Extensions
+1. Click the **Settings** (Gear) icon in the bottom-left sidebar.
+2. Navigate to **Extensions**.
+3. You will see a list of Available and Installed extensions.
+   - **Pre-installed**: Core features like "Word Export" can be toggled On/Off.
+   - **Marketplace**: New features can be installed with a single click.
 
-### Built-in Plugins
-- **word_export**: Handles `.docx` generation.
-- **auth**: (Optional) Provides user authentication.
-
-### Installing Plugins
-Simply drop the plugin folder into `docnexus/plugins/`. The system auto-discovers features.
+### Built-in Extensions
+- **Word Export**: Handles `.docx` generation.
+- **PDF Export**: Generates professional PDFs (requires activation).
+- **Doc Editor**: Enables "Edit" mode for documents.
 
 ---
 

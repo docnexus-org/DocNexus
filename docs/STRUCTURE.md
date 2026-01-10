@@ -7,100 +7,71 @@ This document describes the standard Python project structure for DocNexus.
 ```
 DocNexus/
 ├── docnexus/                 # Main application package
-│   ├── __init__.py            # Package initialization
+│   ├── __init__.py
 │   ├── version_info.py        # Single Source of Truth for Version
 │   ├── app.py                 # Flask application setup
 │   ├── cli.py                 # Command-line interface
 │   ├── core/                  # Core functionality
 │   │   ├── loader.py          # Plugin Loader & DI
+│   │   ├── state.py           # Plugin State Management
 │   │   └── renderer.py        # Markdown rendering engine
 │   ├── features/              # Feature modules
 │   │   ├── registry.py        # Plugin & Feature Registry
-│   │   ├── standard.py        # Standard features
-│   │   └── smart_convert.py   # Experimental features
-│   ├── plugins/               # Bundled Plugins (Word Export, Auth, etc.)
+│   ├── plugins/               # Bundled Plugins (Word, PDF, Auth, etc.)
+│   ├── plugins_dev/           # [OPTIONAL] Development Plugins (Premium)
 │   └── templates/             # HTML templates (Jinja2)
 │
 ├── docs/                      # Project documentation
-│   ├── README.md              # Documentation index
-│   ├── USER_GUIDE.md          # User manual
-│   ├── DOCNEXUS_ARCHITECTURE.md # Architecture deep dive
-│   ├── PLUGIN_DEV_GUIDE.md    # Plugin development guide
-│   └── [various guides...]
+│   ├── README.md
+│   ├── USER_GUIDE.md
+│   ├── DOCNEXUS_ARCHITECTURE.md
+│   ├── PLUGIN_DEVELOPMENT.md  # Plugin development guide
 │
 ├── scripts/                   # Build & Automation Scripts
 │   ├── build.py               # Master build script (Python)
 │   └── run_tests.py           # Test runner
 │
-├── tests/                     # Test Suite
-│   ├── fixtures/              # Test assets
-│   └── output/                # Test artifacts (gitignored)
-│
-├── build/                     # Build artifacts (gitignored)
-│   ├── output/                # Final Exe & Dist
-│   ├── venv/                  # Virtual Environment
-│   └── temp/                  # PyInstaller temp
-│
-├── make.cmd                   # Windows Build Wrapper (Powershell)
-├── make.ps1                   # Powershell Entry Point
-├── VERSION                    # Version File (Synced via build)
-├── README.md                  # Project overview
-├── LICENSE                    # AGPLv3 License
-├── requirements.txt           # Python dependencies
-├── pyproject.toml            # Modern packaging (PEP 518)
-└── .gitignore                # Git exclusions
-```
+├── make.ps1                   # Powershell Entry Point (Windows)
+├── Makefile                   # Make Entry Point (Linux/Mac)
+├── VERSION                    # Version File
+├── README.md
+└── LICENSE
 
 ## Build Process (The `make` system)
 
-We utilize a unified `make.cmd` wrapper around `scripts/build.py` for all lifecycle tasks.
+We utilize a unified build system driven by `scripts/build.py`.
 
 ### 1. Setup
 ```powershell
-.\make.cmd setup  # Creates venv, installs requirements
+.\make.ps1 setup  # Creates venv, installs requirements
 ```
 
-### 2. Run from Source
+### 2. Run from Source (Dev)
 ```powershell
-.\make.cmd run    # Starts local Flask development server
+.\make.ps1 run    # Starts local backend with hot-reload
 ```
 
 ### 3. Testing
 ```powershell
-.\make.cmd test   # Runs unittest suite
+.\make.ps1 test   # Runs pytest suite
 ```
 
 ### 4. Build Standalone Executable
 ```powershell
-.\make.cmd build  # Uses PyInstaller to create frozen EXE in build/output
+.\make.ps1 build  # Uses PyInstaller to create frozen EXE in build/output
 ```
-*   **Version Sync**: The build process automatically reads `docnexus/version_info.py` and updates the `VERSION` file.
-*   **Asset Bundling**: Templates, static assets, and bundled plugins are collected.
+*   **Version Sync**: Automatically syncs `docnexus/version_info.py` to `VERSION`.
+*   **Asset Bundling**: Bundles `plugins` (and `plugins_dev` if present).
+*   **Output**: `build/output/DocNexus_v1.x.x.exe`
 
 ### 5. Launch
 ```powershell
-.\make.cmd launch # Runs the certified build from output folder
+.\make.ps1 launch # Runs the certified build from output folder
 ```
 
 ### Create Release
-```bash
-# Build executable
-pyinstaller DocPresent.spec --clean
-
-# Create release structure
-mkdir releases/v1.0.0
-cp dist/DocPresent.exe releases/v1.0.0/
-cp README.md releases/v1.0.0/
-cp -r doc releases/v1.0.0/
-cp -r workspace releases/v1.0.0/
-
-# Create archive
-cd releases
-zip -r DocPresent-v1.0.0-Windows-x64.zip v1.0.0/
-
-# Generate checksum
-sha256sum DocPresent-v1.0.0-Windows-x64.zip > CHECKSUMS.txt
-```
+The `build` command automatically produces a production-ready executable in `build/output`.
+No manual PyInstaller steps are required.
 
 ## Git Workflow
 

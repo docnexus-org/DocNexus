@@ -4,6 +4,7 @@ __pycache__/
 # Test Results
 test_export.docx
 tests/output/
+tests/latest_results.log
 *.so
 .Python
 env/

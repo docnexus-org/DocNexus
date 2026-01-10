@@ -20,6 +20,7 @@ Complete documentation for DocPresent v1.0.0 - Professional Markdown Documentati
 ## Development
 
 - **[Build Guide](BUILD.md)** - Building executables and packages
+- **[Script Utility Guide](SCRIPTS.md)** - Helper scripts explained
 - **[Open Source Standards](OPEN_SOURCE_STANDARDS.md)** - Standards compliance details
 - **[Architecture & Logic](DOCNEXUS_ARCHITECTURE.md)** - Logic flows and versioning
 - **[Structure Guide](STRUCTURE.md)** - Project organization

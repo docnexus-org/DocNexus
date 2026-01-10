@@ -1,5 +1,5 @@
 from docnexus.core.plugin_interface import PluginInterface
-from docnexus.core.registry import PluginRegistry
+from docnexus.features.registry import PluginRegistry
 from docnexus.features.registry import Feature, FeatureType, FeatureState
 import logging
 
@@ -14,7 +14,8 @@ class DummyPlugin(PluginInterface):
             'author': 'Developer'
         }
 
-    def initialize(self, registry):
+    def initialize(self):
+        registry = PluginRegistry()
         logger.info("DummyPlugin: Initializing...")
         # Register a UI Slot extension
         registry.register_slot(
@@ -37,4 +38,9 @@ class DummyPlugin(PluginInterface):
         ]
 
 # Register the plugin instance
-PluginRegistry().register(DummyPlugin())
+instance = DummyPlugin()
+PluginRegistry().register(instance)
+
+# Expose features for Loader to find
+def get_features():
+    return instance.get_features()

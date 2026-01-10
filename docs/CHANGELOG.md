@@ -2,13 +2,41 @@
 
 All notable changes to this project will be documented in this file.
 
-## [v1.2.4] - 2026-01-04
+## [v1.2.4] - 2026-01-10
+### Fixed
+- **Editor Plugin**: Fixed critical `Feature` signature mismatch that prevented the Editor from loading in the bundled release (added `state` and `feature_type` args).
+- **Blueprint Registration**: Fixed `loader.py` missing the Editor API blueprint due to variable naming mismatch.
+- **Plugin Detection**: Fixed critical regression where Export plugins (Word/PDF) were incorrectly reported as "Missing" even when installed. The issue was due to the backend verifying logic not syncing with the persisted plugin state.
+- **Startup Crash**: Fixed `AttributeError` in `PluginState` and `UnboundLocalError` in `Loader` that caused the application to crash or fail to load plugins at startup.
+- **PDF Export**: Fixed a `SyntaxError` in the PDF Export plugin that prevented it from loading.
+- **Visuals**: Updated toast notifications in extensions page to use a premium, theme-aware design.
+- **Cleanup**: Resolved JavaScript syntax errors in the Extensions Marketplace that caused UI hangs.
+- **Documentation**: Comprehensive update of README, Architecture, and Developer guides to reflect v1.2.4 changes.
+### Added
+- **Toast Notifications**: Replaced browser alerts with a modern, non-blocking toast notification system (Success/Error/Info) in the Extensions Marketplace.
+- **Professional UI**: Updated "Extension Required" and "Uninstall Confirmation" modals to use a clean, solid "Professional Card" aesthetic (removing glassmorphism) with refined spacing and typography.
+- **Hot-Reload**: Implemented true hot-reload for extensions. Installing an extension immediately activates it, and uninstalling immediately deactivates it without requiring a server restart.
+- **Architectural Refactor**: Moved backend Editor logic (`save_document`) to a bundled plugin (`docnexus.plugins.editor`), validating the core-as-plugins architecture.
+
+### Fixed
+- **Uninstall Logic**: Fixed critical bug where uninstalling a plugin did not remove it from active memory, allowing it to function until restart. Now forces a module reload.
+- **Extensions Page**: Fixed layout corruption (garbage code at bottom) and duplicate script logic that broke the "Disable" button interaction.
+- **UI Spacing**: Tightened metrics for all application modals to be sleek and effective.
+
+## [v1.2.3] - 2026-01-05
+
+- **Testing**: Overhauled testing workflow. Switched to `pytest` (via `scripts/run_tests.py`), enabled single-command execution (`make test`), and centralized output to `tests/latest_results.log`.
+
+### Security
+- **PDF Export**: Implemented "Nuclear Safe Mode" that rigidly strips all external stylesheets and inline styles to prevent `xhtml2pdf` crashes on modern CSS variables.
+
 ### Fixed
 - **Word Export**: Fixed `UnrecognizedImageError` by filtering SVG images and handling external image timeouts gracefully.
 - **Word Export Content**: Fixed missing Table of Contents in exported files.
 - **Word Export Navigation**: Fixed internal TOC links to correctly navigate to document sections.
 - **Registry**: Resolved "Split-Brain" issue by unifying key classes in `docnexus.features.registry`.
 - **UI**: Restored missing UI slots (`HEADER_RIGHT`, `EXPORT_MENU`).
+- **Legacy Tests**: Updated legacy test suite (`test_loader`, `test_registry`) to align with the Phase 1 "Passive" Plugin Architecture (Duck Typing, Singleton Registry).
 
 ## [v1.2.3] - 2026-01-04
 - **Pipeline Backbone**: Implemented `Pipeline` class to construct and execute sequences of `ALGORITHM` features.

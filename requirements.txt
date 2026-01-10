@@ -7,3 +7,4 @@ pymdown-extensions
 Pygments
 htmldocx
 python-docx
+xhtml2pdf

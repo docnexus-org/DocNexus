@@ -100,6 +100,9 @@ Examples:
             print("\nServer stopped.")
             return 0
         except Exception as e:
+            if args.debug or True: # Force traceback for now
+                import traceback
+                traceback.print_exc()
             print(f"Error starting server: {e}", file=sys.stderr)
             return 1
             

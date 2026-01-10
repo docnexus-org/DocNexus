@@ -139,6 +139,23 @@ def kill_existing_process(app_name):
     except Exception:
         pass
 
+def get_hidden_imports_from_venv(package_name):
+    """
+    Dynamically collect hidden imports using PyInstaller's utility.
+    Must run in the venv where PyInstaller and the package are installed.
+    """
+    log(f"Collecting dynamic hidden imports for {package_name}...", Colors.OKCYAN)
+    script = f"from PyInstaller.utils.hooks import collect_submodules; print(','.join(collect_submodules('{package_name}')))"
+    try:
+        # Use simple subprocess to avoid log noise from 'run' wrapper
+        output = subprocess.check_output([str(PYTHON_EXEC), "-c", script], text=True).strip()
+        modules = [x.strip() for x in output.split(',') if x.strip()]
+        log(f"  Found {len(modules)} submodules for {package_name}", Colors.OKBLUE)
+        return modules
+    except Exception as e:
+        log(f"Warning: Could not collect hidden imports for {package_name}: {e}", Colors.WARNING)
+        return []
+
 def build():
     """Build the standalone executable."""
     # Get Version and Sync to VERSION file
@@ -179,20 +196,30 @@ def build():
         "--icon", str(PROJECT_ROOT / "docnexus" / "static" / "logo.ico"),
         "--add-data", f"{PROJECT_ROOT / 'docnexus' / 'templates'}{os.pathsep}docnexus/templates",
         "--add-data", f"{PROJECT_ROOT / 'docnexus' / 'static'}{os.pathsep}docnexus/static",
+        "--add-data", f"{PROJECT_ROOT / 'docnexus' / 'plugins'}{os.pathsep}docnexus/plugins",
     ]
 
     # Hidden Imports
     hidden_imports = [
         "docnexus.version_info",
         "docnexus.features", "docnexus.features.smart_convert",
+        "docnexus.features.registry", "docnexus.features.standard",
         "engineio.async_drivers.threading",
         "pymdownx", "pymdownx.betterem", "pymdownx.superfences",
         "pymdownx.tabbed", "pymdownx.details", "pymdownx.magiclink",
         "pymdownx.tasklist", "pymdownx.arithmatex", "pymdownx.highlight",
         "pymdownx.inlinehilite", "pymdownx.keys", "pymdownx.smartsymbols",
         "pymdownx.snippets", "pymdownx.tilde", "pymdownx.caret",
-        "pymdownx.mark", "pymdownx.emoji", "pymdownx.saneheaders"
+        "pymdownx.mark", "pymdownx.emoji", "pymdownx.saneheaders",
+        # Core Plugins
+        "docnexus.plugins.editor",
+        "docnexus.plugins.editor.routes",
     ]
+    
+    # Dynamic collection for complex packages
+    for pkg in ["xhtml2pdf", "reportlab", "html5lib", "lxml", "docx", "bs4", "htmldocx"]:
+        hidden_imports.extend(get_hidden_imports_from_venv(pkg))
+
     for imp in hidden_imports:
         cmd.extend(["--hidden-import", imp])
 
@@ -207,11 +234,11 @@ def build():
     
     run(cmd)
     
-    # Copy Examples Folder for Distribution
+    # Copy Examples Folder for Distribution as 'workspace'
     examples_src = PROJECT_ROOT / "examples"
-    examples_dst = OUTPUT_DIR / "examples"
+    examples_dst = OUTPUT_DIR / "workspace"
     if examples_src.exists():
-        log(f"Copying examples to dist: {examples_dst}", Colors.OKGREEN)
+        log(f"Copying examples to dist/workspace: {examples_dst}", Colors.OKGREEN)
         if examples_dst.exists():
             shutil.rmtree(examples_dst)
         shutil.copytree(examples_src, examples_dst)
@@ -229,10 +256,45 @@ def build():
 
 def release():
     """Build and Zip."""
+    # 1. Build
     build()
-    log("Creating Release Zip...")
-    # TODO: Implement zipping logic similar to make.ps1
-    pass
+    
+    # 2. Get Version
+    try:
+        init_file = PROJECT_ROOT / "docnexus" / "version_info.py"
+        with open(init_file) as f:
+            for line in f:
+                if "__version__" in line:
+                    version = line.split("'")[1]
+                    break
+    except:
+        version = "0.0.0"
+        
+    release_name = f"DocNexus_v{version}"
+    release_dir = PROJECT_ROOT / "releases" / release_name
+    
+    log(f"Creating Release: {release_name}", Colors.OKCYAN)
+    
+    # 3. Create Release Directory
+    if release_dir.exists():
+        shutil.rmtree(release_dir)
+    release_dir.mkdir(parents=True)
+    
+    # 4. Copy Artifacts
+    log("Copying artifacts...", Colors.OKBLUE)
+    # Copy contents of output dir
+    for item in OUTPUT_DIR.iterdir():
+        if item.is_dir():
+            shutil.copytree(item, release_dir / item.name)
+        else:
+            shutil.copy2(item, release_dir / item.name)
+            
+    # 5. Zip
+    zip_path = PROJECT_ROOT / "releases" / f"{release_name}.zip"
+    log(f"Zipping to {zip_path}...", Colors.OKGREEN)
+    shutil.make_archive(str(zip_path.with_suffix('')), 'zip', release_dir)
+    
+    log(f"Release Complete: {zip_path}", Colors.BOLD)
 
 def run_dev():
     """Run from source."""

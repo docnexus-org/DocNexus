@@ -364,8 +364,8 @@ header {
 
 .search-bar:focus-within {
     border-color: var(--color-accent-primary);
+    outline: none;
     box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
-    background: rgba(255, 255, 255, 0.05);
 }
 
 .search-bar i {
@@ -380,9 +380,122 @@ header {
     width: 100%;
     font-family: var(--font-body);
     font-size: 0.95rem;
+    outline: none;
 }
 
 .search-bar input::placeholder {
     color: var(--color-text-muted);
     opacity: 0.7;
+}
+
+
+.modal-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.6);
+    /* Slightly darker for better focus */
+    backdrop-filter: blur(4px);
+    z-index: 2000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.2s ease;
+}
+
+.modal-overlay.show {
+    opacity: 1;
+    pointer-events: auto;
+}
+
+.modal-card {
+    background: var(--color-bg-primary);
+    border: 1px solid var(--color-border-default);
+    width: 90%;
+    max-width: 440px;
+    /* Slightly wider */
+    border-radius: var(--radius-xl);
+    /* Softer corners */
+    box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05), 0 20px 25px -5px rgba(0, 0, 0, 0.1);
+    padding: 0;
+    /* padding handled by children for full-width header/footer if needed, but we keep simple */
+    transform: scale(0.95);
+    transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+    /* Nice pop effect */
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    /* Ensure rounded corners clip children */
+}
+
+.modal-overlay.show .modal-card {
+    transform: scale(1);
+}
+
+.modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: var(--space-3) var(--space-4);
+    border-bottom: 1px solid var(--color-border-muted);
+    background: var(--color-bg-secondary);
+    /* Subtle separation */
+}
+
+.modal-header h3 {
+    margin: 0;
+    font-size: 1.05rem;
+    font-weight: 600;
+    color: var(--color-text-primary);
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+}
+
+.modal-body {
+    padding: var(--space-3) var(--space-4);
+    /* Reduced from space-4 (24px) to space-3 (16px) */
+    color: var(--color-text-secondary);
+    font-size: 0.95rem;
+    line-height: 1.5;
+}
+
+.modal-footer {
+    display: flex;
+    justify-content: flex-end;
+    align-items: center;
+    gap: var(--space-3);
+    padding: var(--space-3) var(--space-4);
+    border-top: 1px solid var(--color-border-muted);
+    background: var(--color-bg-primary);
+}
+
+/* Plugin Preview Card in Modal - IMPROVED */
+.plugin-preview-card {
+    background: var(--color-surface);
+    border: 1px solid var(--color-border-default);
+    border-radius: var(--radius-lg);
+    padding: 12px;
+    margin: 12px 0 0 0;
+    /* Reduced top margin from 16px (space-3) to 12px for tighter coupling */
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+    box-shadow: var(--shadow-sm);
+}
+
+.plugin-preview-icon {
+    width: 40px;
+    height: 40px;
+    background: linear-gradient(135deg, rgba(99, 102, 241, 0.1) 0%, rgba(139, 92, 246, 0.1) 100%);
+    color: var(--color-accent-primary);
+    border-radius: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.25rem;
 }

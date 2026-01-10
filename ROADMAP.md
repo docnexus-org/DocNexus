@@ -2,25 +2,43 @@
 
 This roadmap outlines the architectural evolution of the DocNexus Open Source project. Our goal is to transform the core into a versatile **Microkernel Platform** for document processing.
 
-## 🚀 Phase 1: Extensibility (current focus)
+## ✅ Phase 1: Extensibility (Completed/Maintenance)
+We have successfully transitioned to a modular architecture.
+*   **Plugin Registry**: fully implemented (`docnexus.features.registry`).
+*   **UI Slots**: Functional injection points (`HEADER_RIGHT`, `EXPORT_MENU`).
+*   **Exports**: PDF and Word export plugins are deployed and stable.
 
-We are moving away from hardcoded logic to a modular architecture.
+## 🚀 Phase 2: Ecosystem & Refinement (Current Focus)
+We are now focusing on enriching the default experience and handling technical debt.
+*   **Default Plugins**:
+    *   **Themes & Icons**: Break out hardcoded themes into installable plugins.
+    *   **Sidebar Enhancements**: Implement "Left/Right Shuffle" arrow for instant layout adjustment.
+    *   **Editor Reliability**: Investigate backup file retention and save/zip conflicts.
+*   **Advanced Features**:
+    *   **RAG / Chat-with-Doc**: A local-first AI plugin to chat with the open document.
+    *   **PDF Export v2**: Refine the export processing for better layout fidelity.
+    *   **Smart Conversion (Experimental)**:
+        *   **ASCII to Table**: Convert ASCII art tables to Markdown tables.
+        *   **SIP Signaling**: Convert text-based flows to Mermaid sequence diagrams.
+        *   **Network Topology**: Convert text description to node diagrams.
 
-* **Plugin Registry**: A standardized way to register features.
-* **UI Slots**: Define "injection points" in the UI for plugins to add widgets (Sidebars, Menu items).
-* **Theme System**: Allow plugins to provide complete visual overhauls.
+## 🛠 Phase 3: The Pipeline Architecture (Inspired by UnifiedJS)
+We will transition from monolithic rendering to a `Middleware` pipeline pattern, treating documents as data streams.
+*   **Architecture**: `Parser (Markdown -> AST)` -> `Transformers (AST Modification)` -> `Compiler (AST -> HTML/PDF/DOCX)`.
+*   **AST Standard**: Adopt **MDAST** (Markdown Abstract Syntax Tree) as the internal representation.
+*   **Use Cases**:
+    *   **Auto-Linker**: Middleware to detect "JIRA-123" and wrap it in a link node.
+    *   **Sanitizer**: Middleware to strip dangerous JS nodes before compilation.
+    *   **Metadata Extractor**: Middleware to harvest Frontmatter for an indexing service.
 
-## 🛠 Phase 2: The Pipeline Architecture
+## 🧠 Phase 4: The Microkernel & Manifest (Inspired by VS Code)
+We aim to decouple the "App" from its features, making the core a lightweight plugin runner.
+*   **Contribution Points**: Move hardcoded menus/sidebars to a declarative `manifest.json` model (e.g., `contributes.views`, `contributes.commands`).
+*   **Activation Events**: Plugins will lazy-load based on events (e.g., `onCommand:export`, `onFileType:markdown`).
+*   **Universal Document Model (UDM)**:
+    *   Abstract `File` access into a `Vault` interface (Inspired by Obsidian).
+    *   Allow plugins to implement "Virtual File Systems" (e.g., GitHub, S3, SQL Database).
+*   **Model Context Protocol (MCP)**: Native support for connecting documents to external AI models for RAG.
 
-Document rendering will move to a `Middleware` pipeline pattern.
-
-* **Render Pipeline**: `Input -> Middleware[] -> Output`.
-* **Benefit**: Developers can inject steps to specialized processing (e.g., "Sanitize HTML", "Auto-link Tickets", "Extract Metadata") without forking the core.
-
-## 🧠 Phase 3: The "Blank Slate" Microkernel
-
-We aim to decouple the "Markdown" logic from the "App" logic.
-
-* **Universal Document Model (UDM)**: A structured object representation of documents.
-* **Manifest-driven UI**: A VS Code-style architecture where the UI is composed entirely of contributions from (default) plugins.
-* **Model Context Protocol (MCP)**: Native support for connecting documents to external data models.
+## 📢 Outreach
+*   **Showcase**: Prepare assets for LinkedIn and GitHub launch.

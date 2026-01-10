@@ -59,13 +59,23 @@ When a file is requested:
 ## 3. Module Breakdown
 
 ### `docnexus.core`
-The engine room. Contains `renderer.py` which orchestrates the markdown-to-html conversion.
+The engine room.
+*   `renderer.py`: Orchestrates the markdown-to-html conversion.
+*   `loader.py`: Handles plugin discovery, dependency injection, and loading in both Dev and Frozen environments.
+*   `state.py`: Manages the persistence of plugin states (Enabled/Disabled) via `plugins.json`.
 
 ### `docnexus.features`
 The "Plugin" system for core features.
-*   **Registry**: Manages what features are active.
+*   **Registry**: Manages what features are active (Unified Registry pattern).
+*   **FeatureManager**: The global access point (`FEATURES` in `app.py`) that acts as a facade.
+*   **Passive Architecture**: Plugins do not import from `docnexus`; dependencies are injected by the Loader.
 *   **Standard**: Baseline features (TOC, Headers).
 *   **Smart**: Advanced AI/Regex features (currently strictly separated).
+
+### `docnexus.plugins`
+User-installable extensions.
+*   **Isolation**: Each plugin is its own package.
+*   **Safe Mode**: Export plugins (esp. PDF) operate in a "Safe Mode" that strips complex web CSS to prevent engine crashes.
 
 ### `docnexus.templates`
 Jinja2 HTML templates.

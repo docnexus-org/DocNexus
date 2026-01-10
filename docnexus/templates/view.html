@@ -661,6 +661,180 @@
                 font-size: var(--font-size-2xl);
             }
         }
+
+        /* Modal Styles */
+        /* Updated Professional Modal Styles */
+        .modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.5);
+            /* Darker overlay for focus */
+            backdrop-filter: blur(2px);
+            /* Very subtle blur just to de-emphasize background */
+            z-index: 2000;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.2s ease;
+        }
+
+        .modal-overlay.show {
+            opacity: 1;
+            pointer-events: auto;
+        }
+
+        .modal-glass {
+            /* Renamed concept to Professional Card in spirit, keeping class name to avoid HTML refactor */
+            background: var(--color-bg-primary);
+            /* Solid background using theme variable */
+            border: 1px solid var(--color-border);
+            width: 100%;
+            max-width: 420px;
+            border-radius: var(--radius-lg);
+            /* Slightly tighter radius */
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06), 0 20px 25px -5px rgba(0, 0, 0, 0.1);
+            /* Tailored shadow for depth */
+            padding: var(--space-6);
+            transform: scale(0.98);
+            /* Subtle scale entry */
+            transition: transform 0.15s ease-out;
+        }
+
+        [data-theme="dark"] .modal-glass {
+            background: #1f2937;
+            /* Specific dark gray for dark mode */
+            border-color: #374151;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.3), 0 20px 25px -5px rgba(0, 0, 0, 0.3);
+        }
+
+        .modal-overlay.show .modal-glass {
+            transform: scale(1);
+        }
+
+        .modal-overlay.show .modal-glass {
+            transform: translateY(0);
+        }
+
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: var(--space-4);
+        }
+
+        .modal-header h3 {
+            margin: 0;
+            font-size: 1.25rem;
+            color: var(--color-text-primary);
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .btn-close {
+            background: transparent;
+            border: none;
+            color: var(--color-text-muted);
+            cursor: pointer;
+            font-size: 1.25rem;
+            padding: 4px;
+            border-radius: 50%;
+            transition: all 0.2s;
+        }
+
+        .btn-close:hover {
+            background: var(--color-bg-secondary);
+            color: var(--color-text-primary);
+        }
+
+        .modal-body {
+            margin-bottom: var(--space-4);
+            color: var(--color-text-secondary);
+            font-size: 0.95rem;
+            line-height: 1.5;
+        }
+
+        .plugin-preview {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            background: var(--color-bg-secondary);
+            padding: 12px;
+            border-radius: var(--radius-lg);
+            margin-top: 16px;
+            border: 1px solid var(--color-border-default);
+        }
+
+        .plugin-icon {
+            width: 40px;
+            height: 40px;
+            background: var(--color-surface);
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: var(--color-accent-primary);
+            font-size: 1.25rem;
+            box-shadow: var(--shadow-sm);
+        }
+
+        .plugin-info {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .plugin-badge {
+            font-size: 0.75rem;
+            color: var(--color-text-muted);
+            text-transform: uppercase;
+            font-weight: 600;
+        }
+
+        .modal-footer {
+            display: flex;
+            gap: 12px;
+            justify-content: flex-end;
+        }
+
+        .btn-ghost {
+            background: transparent;
+            border: 1px solid transparent;
+            color: var(--color-text-secondary);
+            padding: 8px 16px;
+            border-radius: var(--radius-md);
+            cursor: pointer;
+            font-weight: 500;
+        }
+
+        .btn-ghost:hover {
+            background: var(--color-bg-secondary);
+            color: var(--color-text-primary);
+        }
+
+        .btn-primary {
+            background: var(--color-accent-primary);
+            color: white;
+            border: none;
+            padding: 8px 20px;
+            border-radius: var(--radius-md);
+            cursor: pointer;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            box-shadow: 0 4px 12px rgba(99, 102, 241, 0.3);
+            transition: all 0.2s;
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 6px 16px rgba(99, 102, 241, 0.4);
+        }
     </style>
 </head>
 
@@ -699,11 +873,11 @@
                         <i class="fas fa-download"></i>
                     </button>
                     <div class="export-dropdown-menu" id="exportMenu">
-                        <div class="export-dropdown-item pdf" onclick="exportToPDF()">
-                            <i class="fas fa-file-pdf"></i> PDF
-                        </div>
                         <div class="export-dropdown-item word" onclick="exportToWord()">
                             <i class="fas fa-file-word"></i> Word
+                        </div>
+                        <div class="export-dropdown-item pdf" onclick="exportToPDF()">
+                            <i class="fas fa-file-pdf"></i> PDF
                         </div>
                         <!-- Slot: EXPORT_MENU -->
                         {% for slot_html in get_slots('EXPORT_MENU') %}
@@ -1025,7 +1199,11 @@
             })
                 .then(r => {
                     if (r.ok) return r.blob();
-                    return r.json().then(data => { throw new Error(data.message || data.error || 'Export failed') });
+                    return r.json().then(data => {
+                        const err = new Error(data.message || data.error || 'Export failed');
+                        err.code = data.code;
+                        throw err;
+                    });
                 })
                 .then(blob => {
                     const url = window.URL.createObjectURL(blob);
@@ -1036,11 +1214,80 @@
                     btn.innerHTML = orig;
                 })
                 .catch(e => {
-                    alert('Export Error: ' + e.message);
+                    console.error(e);
+                    if (e.name === 'MISSING_PLUGIN' || e.code === 'MISSING_PLUGIN' || e.message.includes('not installed')) {
+                        showPluginModal(ext);
+                    } else {
+                        alert('Export Error: ' + e.message);
+                    }
                     btn.innerHTML = orig;
                 });
         }
+
+        // --- Modal Logic ---
+        function showPluginModal(type) {
+            const modal = document.getElementById('plugin-modal');
+            const nameEl = document.getElementById('plugin-modal-name');
+            const previewEl = document.getElementById('plugin-modal-name-preview');
+
+            const displayNames = {
+                'pdf': 'PDF Export',
+                'docx': 'Word Export'
+            };
+
+            const displayText = displayNames[type] || (type.toUpperCase() + ' Export');
+            nameEl.textContent = displayText;
+            if (previewEl) previewEl.textContent = displayText;
+
+            modal.classList.add('show');
+        }
+
+        function closePluginModal() {
+            document.getElementById('plugin-modal').classList.remove('show');
+        }
+
+        function goToMarketplace() {
+            window.location.href = '/extensions';
+        }
+
+        // Close on outside click
+        window.addEventListener('click', (e) => {
+            const modal = document.getElementById('plugin-modal');
+            if (e.target === modal) closePluginModal();
+        });
     </script>
+
+    <!-- Plugin Install Modal (Global Style) -->
+    <div id="plugin-modal" class="modal-overlay">
+        <div class="modal-card">
+            <div class="modal-header">
+                <h3><i class="fas fa-extension"></i> Extension Required</h3>
+                <button class="btn-icon" style="width:32px;height:32px;" onclick="closePluginModal()">
+                    <i class="fas fa-times" style="font-size:0.9rem;"></i>
+                </button>
+            </div>
+            <div class="modal-body">
+                <p>The <strong><span id="plugin-modal-name">Feature</span></strong> extension is required to perform
+                    this action. It is free and takes just a moment to install from the marketplace.</p>
+
+                <div class="plugin-preview-card">
+                    <div class="plugin-preview-icon"><i class="fas fa-box"></i></div>
+                    <div>
+                        <div style="font-weight:600; color:var(--color-text-primary);" id="plugin-modal-name-preview">
+                            PDF Export</div>
+                        <div style="font-size:0.85rem; color:var(--color-success);">Free Extension</div>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn" onclick="closePluginModal()">Cancel</button>
+                <button class="btn-primary" onclick="goToMarketplace()">
+                    Get Extension
+                </button>
+            </div>
+        </div>
+    </div>
+
     <!-- React & Plugin System -->
     <script src="{{ url_for('static', filename='vendor/react.production.min.js') }}"></script>
     <script src="{{ url_for('static', filename='vendor/react-dom.production.min.js') }}"></script>
