@@ -43,6 +43,19 @@ except Exception:
 from docnexus.core.loader import load_plugins
 from docnexus.features.registry import PluginRegistry
 
+# Input Support Configuration
+try:
+    import mammoth
+    WORD_INPUT_AVAILABLE = True
+    def convert_docx_to_html(start_path):
+        with open(start_path, "rb") as docx_file:
+            result = mammoth.convert_to_html(docx_file)
+            return result.value
+except ImportError:
+    WORD_INPUT_AVAILABLE = False
+    def convert_docx_to_html(start_path):
+        raise ImportError("mammoth library not installed")
+
 import os
 
 # Standard Version Loading (Fail Fast)

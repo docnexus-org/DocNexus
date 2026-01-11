@@ -5,17 +5,15 @@ Specific file browse button is missing. - Done
 The go to hub button should be brought back and it should be made similar to top rated tools - Done
 Workspace does not show the subfolder inside if any. - done
 The styling of table of content needs to be improved. - done
+The plugin feature for different features support needs to be added.  - Done
 
 Make release work with localhost sas well as global whereas dev work with localhost only.
-The plugin feature for different features support needs to be added. 
+
 -> Word And PDF plugins are developed. BUt various other default plugins needs to be added like themes, icon pack, sidebar etc.
 -> One RAG based plugin for chatting with doc can be useful.
-
-Update the export processing of pdf plugin.
-Showcase on linkedIn and Github
+Showcase on Github
 The left to right shuffle of side bar can be done using a arrow.
 Check the backup files seen after editing. The reason, retention and issues.
-Save functionality has some issues when user downloads code zip.
 Why the side bar not available in txt file.
             
 Diagram Export Support (v1.2.4 Limitation):

@@ -27,9 +27,16 @@ All notable changes to this project will be documented in this file.
     - **Clean Output**: Stripped web UI elements (Navbar, Sidebar, Buttons) using `#documentContent` targeting.
     - **Structure**: Repositioned TOC to top of document.
     - **Fixes**: Fixed internal linking, removed header artifacts (`¶`), and stripped unsupported emojis ("tofu").
+- **Sidebar**:
+    - **Flash Fix**: Eliminated "Flash of Unstyled Content" (FOUC) by applying TOC position preferences immediately before render.
+    - **Availability**: Sidebar is now available for all file types (including text files).
+    - **Shuffle**: Added "Swap Layout" button with sleek, ghosted double-arrow icon for premium look.
+    - **Sync**: Fixed TOC sync issues on Text/Docx files by expanding detection logic to include `H1` headers.
 
 ### Fixed
 - **Stability**: Fixed `500 Internal Server Error` caused by missing `__len__` in `Pipeline` class.
+- **Word Preview**: Fixed crash (`500 Error`) when previewing `.docx` files by restoring missing `mammoth` configuration.
+- **PDF Export**: Fixed critical bug where PDF exports from Word documents were saved with incorrect `.docx` extension.
 - **Editor Plugin**: Fixed syntax typo to prevent import errors.
 - **Logging**: Unified log levels and added better tracing for loader and plugins.
 

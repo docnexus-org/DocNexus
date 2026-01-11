@@ -835,6 +835,22 @@
             transform: translateY(-1px);
             box-shadow: 0 6px 16px rgba(99, 102, 241, 0.4);
         }
+
+        /* Shuffle Button (Ghost Style) */
+        .btn-shuffle {
+            color: var(--color-text-tertiary);
+            opacity: 0.4;
+            transition: all 0.2s ease;
+            background: transparent !important;
+            border: none;
+            padding: 4px;
+        }
+
+        .btn-shuffle:hover {
+            opacity: 1;
+            transform: scale(1.1);
+            color: var(--color-accent-primary);
+        }
     </style>
 </head>
 
@@ -898,7 +914,22 @@
     </nav>
 
     <!-- Main Content -->
+    <!-- Main Content -->
     <div class="main-container">
+        <script>
+            // Anti-FOUC: Apply TOC position immediately
+            (function () {
+                const savedPos = localStorage.getItem('tocPosition') || 'right';
+                const container = document.currentScript.parentElement;
+                if (savedPos === 'left') {
+                    container.classList.add('toc-left');
+                    container.classList.remove('toc-right');
+                } else {
+                    container.classList.remove('toc-left');
+                    container.classList.add('toc-right');
+                }
+            })();
+        </script>
         <main class="content-area">
             <div id="documentContent">
                 <!-- Slot: CONTENT_START -->
@@ -945,8 +976,14 @@
         </main>
 
         <!-- Sidebar ToC -->
+        <!-- Sidebar ToC -->
         <aside class="toc-sidebar">
-            <div class="toc-title">On this page</div>
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                <div class="toc-title" style="margin-bottom: 0;">On this page</div>
+                <button class="btn-icon btn-shuffle" onclick="LayoutManager.toggle()" title="Switch Layout">
+                    <i class="fas fa-arrow-right-arrow-left"></i>
+                </button>
+            </div>
             <nav id="tocNav" class="toc-nav"></nav>
 
             <!-- Slot: SIDEBAR_BOTTOM -->
@@ -990,10 +1027,10 @@
 
             if (!content || !tocNav) return;
 
-            const headers = content.querySelectorAll('h2, h3');
+            const headers = content.querySelectorAll('h1, h2, h3');
             if (headers.length === 0) {
-                const sidebar = document.querySelector('.toc-sidebar');
-                if (sidebar) sidebar.style.display = 'none';
+                // Empty State
+                tocNav.innerHTML = '<div style="color:var(--color-text-tertiary); font-size:0.85rem; padding:10px 0;">No outline available</div>';
                 return;
             }
 
@@ -1195,7 +1232,7 @@
             fetch(endpoint, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ html: html, filename: currentFilename.replace(/.md$/, '.' + ext) })
+                body: JSON.stringify({ html: html, filename: currentFilename.replace(/\.[^/.]+$/, '.' + ext) })
             })
                 .then(r => {
                     if (r.ok) return r.blob();
@@ -1209,7 +1246,7 @@
                     const url = window.URL.createObjectURL(blob);
                     const a = document.createElement('a');
                     a.href = url;
-                    a.download = currentFilename.replace(/.md$/, '.' + ext);
+                    a.download = currentFilename.replace(/\.[^/.]+$/, '.' + ext);
                     a.click();
                     btn.innerHTML = orig;
                 })
