@@ -85,7 +85,7 @@ No manual PyInstaller steps are required.
 ### Tracked Files
 - Source code: `doc_viewer/`
 - Documentation: `docs/`, `README.md`
-- Samples: `examples/`
+- Samples: `docs/examples/`
 - Configuration: `pyproject.toml`, `setup.py`, `requirements.txt`
 - Build specs: `DocPresent.spec`, `MANIFEST.in`
 

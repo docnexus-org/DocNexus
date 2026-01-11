@@ -69,7 +69,7 @@ docnexus start
 ## Usage Guide
 
 ### Organizing Documentation
-DocNexus uses a file-system based approach. Simply place your files in the `examples/` or `markdown_files/` directory (configurable).
+DocNexus uses a file-system based approach. Simply place your files in the `docs/examples/` or `markdown_files/` directory (configurable).
 
 ```
 root/

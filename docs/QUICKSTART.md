@@ -218,7 +218,7 @@ DocNexus/
 │   └── templates/      # HTML templates
 ├── tests/              # Test suite
 ├── docs/               # Documentation
-├── examples/           # Sample documents
+│   └── examples/       # Sample documents
 └── releases/           # Release artifacts
 ```
 

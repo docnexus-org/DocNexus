@@ -235,7 +235,7 @@ def build():
     run(cmd)
     
     # Copy Examples Folder for Distribution as 'workspace'
-    examples_src = PROJECT_ROOT / "examples"
+    examples_src = PROJECT_ROOT / "docs" / "examples"
     examples_dst = OUTPUT_DIR / "workspace"
     if examples_src.exists():
         log(f"Copying examples to dist/workspace: {examples_dst}", Colors.OKGREEN)
@@ -271,9 +271,15 @@ def release():
         version = "0.0.0"
         
     release_name = f"DocNexus_v{version}"
-    release_dir = PROJECT_ROOT / "releases" / release_name
+    releases_root = PROJECT_ROOT / "releases"
+    archive_dir = releases_root / "archive"
+    release_dir = archive_dir / release_name
     
-    log(f"Creating Release: {release_name}", Colors.OKCYAN)
+    # Create structure
+    if not archive_dir.exists():
+        archive_dir.mkdir(parents=True)
+        
+    log(f"Creating Release in Archive: {release_name}", Colors.OKCYAN)
     
     # 3. Create Release Directory
     if release_dir.exists():
@@ -289,12 +295,34 @@ def release():
         else:
             shutil.copy2(item, release_dir / item.name)
             
-    # 5. Zip
-    zip_path = PROJECT_ROOT / "releases" / f"{release_name}.zip"
+    # 5. Zip to Archive
+    zip_path = archive_dir / f"{release_name}.zip"
     log(f"Zipping to {zip_path}...", Colors.OKGREEN)
     shutil.make_archive(str(zip_path.with_suffix('')), 'zip', release_dir)
     
+    # 6. Update Latest
+    latest_dir = releases_root / "latest"
+    latest_zip = releases_root / "latest.zip"
+    
+    log("Updating latest...", Colors.OKCYAN)
+    
+    # Remove old latest
+    if latest_dir.exists():
+        if latest_dir.is_symlink():
+            os.remove(latest_dir)
+        else:
+            shutil.rmtree(latest_dir)
+    if latest_zip.exists():
+        os.remove(latest_zip)
+        
+    # Copy new latest
+    # We use copy instead of symlink to ensure it works on all Windows restricted envs
+    # and to make "latest" a standalone artifact.
+    shutil.copytree(release_dir, latest_dir)
+    shutil.copy2(zip_path, latest_zip)
+    
     log(f"Release Complete: {zip_path}", Colors.BOLD)
+    log(f"Latest Updated: {latest_zip}", Colors.BOLD)
 
 def run_dev():
     """Run from source."""
