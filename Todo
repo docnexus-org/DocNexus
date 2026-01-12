@@ -26,3 +26,35 @@ Diagram Export Support (v1.2.6 Resolved): - Done
 Missing Diagram Capabilities (GitHub Parity):
 -> GeoJSON/TopoJSON Support: Interactive map rendering (Leaflet/MapLibre).
 -> STL Support: 3D model viewer (Three.js).
+
+Missing Markdown Features (Audit & Roadmap):
+[Navigation & Linking]
+-> WikiLinks: Support for `[[Internal Link]]` syntax (Obsidian/Roam standard). - Done (v1.2.6)
+-> Header Permalinks: Hover-anchors for all headings (`#` link next to header).
+-> Auto-Nav: Previous/Next page links generation based on file order.
+
+[GitHub Compatibility & Extended Syntax]
+-> GitHub Alerts: Support for `> [!NOTE]` blockquote syntax (currently we use `!!!` admonitions). - Done (v1.2.6)
+-> Mentions: `@username` parsing (useful for future collaboration features).
+-> Emoji: `pymdownx.emoji` (:smile:) integration. - Done (v1.2.6)
+
+[Typography & Layout]
+-> Smarty: `pymdownx.smarty` for automatic smart quotes, em-dashes, and ellipses. - Done (v1.2.6)
+-> Image Resizing: Syntax for `![Alt|100x100](img.png)` or attributes `{: width=100 }`.
+-> Captions: HTML5 `<figure>` and `<figcaption>` generation from image titles.
+-> Column Layouts: Syntax for multi-column content (e.g., `::: col-2`).
+
+[Academic & Technical]
+-> Citations: BibTeX/CSL support for academic referencing `[@author]`.these 
+-> Glossary/Abbreviations: Centralized glossary definition and auto-linking. - Done (Extension Enabled)
+-> Line Numbers: Toggleable line numbering for code blocks.
+-> Data Tables: Sortable/Filterable tables (JS enhancement over static HTML).
+
+[Collaboration]
+-> CriticMarkup: Standard formatting for additions `{++ ++}`, deletions `{-- --}`, and comments `{>> <<}`. - Done (v1.2.6)
+-> Annotations: Text highlighting `==mark==` with attached comments.
+
+[Advanced Media]
+-> Embded PDF/Video: Syntax to embed non-image media directly.
+-> Base64 Embedding: `pymdownx.b64` to inline assets for single-file portability.
+-> Remote Includes: `pymdownx.snippets` shows in code, but needs config to allow including URLs or relative paths effectively.
