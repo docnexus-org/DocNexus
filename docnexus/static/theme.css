@@ -732,3 +732,20 @@ a.wikilink:hover {
     color: var(--color-text-link-hover);
     border-bottom-style: solid;
 }
+
+/* Abbreviation UX Improvement */
+abbr {
+    cursor: help;
+    text-decoration: underline dotted;
+    text-decoration-color: var(--color-text-muted);
+}
+
+/* Collapsible Header UX Improvement */
+details>summary {
+    cursor: pointer;
+    transition: color 0.2s ease;
+}
+
+details>summary:hover {
+    color: var(--color-accent-primary);
+}
