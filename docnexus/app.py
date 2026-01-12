@@ -91,6 +91,13 @@ def add_header(r):
     r.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
     r.headers["Pragma"] = "no-cache"
     r.headers["Expires"] = "0"
+    # Content Security Policy (Liberal for local app with heavy JS libs like Mermaid/KaTeX)
+    r.headers["Content-Security-Policy"] = (
+        "default-src 'self' 'unsafe-inline' 'unsafe-eval' data: blob: "
+        "https://fonts.googleapis.com https://fonts.gstatic.com "
+        "https://cdnjs.cloudflare.com https://cdn.jsdelivr.net "
+        "https://uicdn.toast.com;"
+    )
     return r
 
 # Global Feature Manager (initialized later)

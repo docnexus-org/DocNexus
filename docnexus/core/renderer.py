@@ -3,13 +3,30 @@ import markdown
 import re
 import pymdownx.superfences
 import pymdownx.emoji
+import pymdownx.saneheaders
+# pymdownx.smarty removed (deprecated in v10)
+import pymdownx.critic
+import pymdownx.magiclink
+import pymdownx.tasklist
+import markdown.extensions.meta
+import markdown.extensions.wikilinks
 import logging
+# Explicit imports to force PyInstaller detection and runtime availability
+import markdown.extensions.wikilinks
+import markdown.extensions.smarty
+import markdown.extensions.admonition
+import markdown.extensions.meta
+import markdown.extensions.toc
+import markdown.extensions.fenced_code
+import markdown.extensions.tables
+import markdown.extensions.codehilite
 
 logger = logging.getLogger(__name__)
 
 # Baseline/standard rendering: just Markdown -> HTML with extensions
 
 def render_github_alerts(md_text: str) -> str:
+# ... (rest of function same, just sync context)
     """
     Convert GitHub-style alerts to Python-Markdown Admonition syntax.
     > [!NOTE] 
@@ -76,6 +93,22 @@ def render_github_alerts(md_text: str) -> str:
             
     return '\n'.join(out_lines)
 
+
+
+# Patch standard WikiLinkExtension to allow dots in filenames (e.g. [[v1.2.6]])
+from markdown.extensions.wikilinks import WikiLinkExtension, WikiLinksInlineProcessor
+
+class EnhancedWikiLinkExtension(WikiLinkExtension):
+    def extendMarkdown(self, md):
+        self.md = md
+        # Regex to match [[WikiLink]] including dots and standard chars
+        # Original: \[\[([\w0-9_ -]+)\]\]
+        WIKILINK_RE = r'\[\[([\w0-9_ \-\.]+)\]\]'
+        config = self.getConfigs()
+        wikilinkPattern = WikiLinksInlineProcessor(WIKILINK_RE, config)
+        wikilinkPattern.md = md
+        md.inlinePatterns.register(wikilinkPattern, 'wikilink', 75)
+
 def render_baseline(md_text: str) -> str:
     # 1. Remove [TOC] marker
     md_text = re.sub(r'^\[TOC\]$', '', md_text, flags=re.MULTILINE | re.IGNORECASE)
@@ -90,7 +123,7 @@ def render_baseline(md_text: str) -> str:
     md_instance = markdown.Markdown(
         extensions=[
             'markdown.extensions.meta',       # Metadata / Frontmatter
-            'markdown.extensions.wikilinks',  # [[Link]]
+            # 'markdown.extensions.wikilinks', # Replaced by EnhancedWikiLinkExtension below
             'fenced_code',
             'tables',
             'nl2br',
@@ -121,8 +154,10 @@ def render_baseline(md_text: str) -> str:
             'pymdownx.magiclink',
             'pymdownx.emoji',                 # Emojis :smile:
             'pymdownx.saneheaders',           # Stable headers
-            'pymdownx.smarty',                # Smart quotes
+            # 'pymdownx.smarty',              # Removed (Deprecated)
+            'markdown.extensions.smarty',     # Standard Smarty (Quotes/Dashes)
             'pymdownx.critic',                # CriticMarkup {++ ++}
+            EnhancedWikiLinkExtension(base_url='/file/', end_url='') # Custom Extension Instance
         ],
         extension_configs={
             "pymdownx.superfences": {

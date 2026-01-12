@@ -19,8 +19,8 @@
     <link rel="stylesheet" href="https://uicdn.toast.com/editor/latest/theme/toastui-editor-dark.min.css" />
 
     <!-- Code Highlight Theme (Dynamic) -->
-    <link id="highlightTheme" rel="stylesheet"
-        href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github.min.css">
+    <!-- Code Highlight Theme (Server-Side) -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='pygments.css') }}">
 
     <!-- Mermaid -->
     <script src="https://cdn.jsdelivr.net/npm/mermaid/dist/mermaid.min.js"></script>
@@ -1102,7 +1102,8 @@
         let editorInstance = null;
 
         // Highlight logic for view mode
-        hljs.highlightAll();
+        // Highlight logic for view mode
+        // hljs.highlightAll(); // Disabled: Server-side highlighting is used
 
         function generateId(text) {
             return text.toLowerCase().replace(/[^\w\s-]/g, '').replace(/\s+/g, '-').replace(/--+/g, '-').trim();
