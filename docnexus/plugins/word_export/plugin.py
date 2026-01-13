@@ -106,6 +106,178 @@ class SafeHtmlToDocx(HtmlToDocx):
             except Exception:
                 pass
 
+
+def transform_html_for_word(soup):
+    """
+    Transforms complex/interactive HTML elements into simpler, Word-compatible structures.
+    Target: htmldocx compatibility.
+    """
+    
+    # 1. Transform Tabs (.tabbed-set) -> Vertical Headings + Content
+    # Structure: .tabbed-set > input, label, .tabbed-content
+    for tab_set in soup.find_all(class_='tabbed-set'):
+        # Create a container for the flattened content
+        flattened_div = soup.new_tag('div')
+        
+        # Iterate over labels and corresponding content
+        labels = tab_set.find_all('label')
+        contents = tab_set.find_all(class_='tabbed-content')
+        
+        for i, label in enumerate(labels):
+            if i < len(contents):
+                # Create Heading from Label
+                h4 = soup.new_tag('h4')
+                h4.string = label.get_text(strip=True)
+                h4['style'] = "margin-top: 12px; margin-bottom: 4px; color: #4b5563;"
+                flattened_div.append(h4)
+                
+                # Append Content directly
+                content = contents[i]
+                # Remove class to prevent CSS interference if any
+                del content['class']
+                content['style'] = "margin-left: 8px; margin-bottom: 12px;"
+                flattened_div.append(content)
+        
+        # Replace the complex tab set with the flattened div
+        tab_set.replace_with(flattened_div)
+
+    # 2. Transform Collapsible Details (details) -> Bold Summary + Content
+    for details in soup.find_all('details'):
+        summary = details.find('summary')
+        if summary:
+            # Create a bold paragraph for the summary
+            p = soup.new_tag('p')
+            b = soup.new_tag('b')
+            b.string = f"▶ {summary.get_text(strip=True)}"
+            p.append(b)
+            p['style'] = "margin-top: 8px; margin-bottom: 4px;"
+            
+            # Insert summary P before the details tag
+            details.insert_before(p)
+            
+            # Unwrap the details tag (keeping children, removing details wrapper)
+            # The summary tag is still there, need to remove it
+            summary.decompose()
+            details.unwrap()
+
+    # 3. Transform GitHub Alerts (.admonition) -> Single-Cell Tables
+    # htmldocx doesn't support complex borders/backgrounds on divs well.
+    alert_colors = {
+        'note': '#0969da',
+        'tip': '#1a7f37',
+        'important': '#8250df',
+        'warning': '#bf8700',
+        'caution': '#d1242f',
+        'danger': '#d1242f'
+    }
+    
+    for admonition in soup.find_all(class_='admonition'):
+        # Determine type/color
+        classes = admonition.get('class', [])
+        color = '#0969da' # Default Blue
+        alert_type = 'NOTE'
+        
+        for cls, hex_code in alert_colors.items():
+            if cls in classes:
+                color = hex_code
+                alert_type = cls.upper()
+                break
+        
+        # Create Table
+        table = soup.new_tag('table')
+        table['style'] = f"border-collapse: collapse; width: 100%; border-left: 4px solid {color}; background-color: #f8f9fa;"
+        tr = soup.new_tag('tr')
+        td = soup.new_tag('td')
+        td['style'] = "padding: 8px;"
+        
+        # Extract Title
+        title = admonition.find(class_='admonition-title')
+        if title:
+            # Create a bold paragraph for the title
+            title_p = soup.new_tag('p')
+            title_b = soup.new_tag('b')
+            title_b.string = title.get_text(strip=True) or alert_type
+            title_b['style'] = f"color: {color};"
+            title_p.append(title_b)
+            td.append(title_p)
+            title.decompose()
+        
+        # Move remaining content to TD
+        # We need to copy children one by one to avoid issues while modifying the tree
+        content_items = list(admonition.contents)
+        for item in content_items:
+            td.append(item)
+            
+        tr.append(td)
+        table.append(tr)
+        
+        admonition.replace_with(table)
+
+    # 4. Transform Task Lists -> Text [x] / [ ]
+    for checkbox in soup.find_all('input', {'type': 'checkbox'}):
+        is_checked = checkbox.has_attr('checked')
+        replacement = soup.new_tag('span')
+        replacement.string = "[x] " if is_checked else "[ ] "
+        replacement['style'] = "font-family: monospace;"
+        checkbox.replace_with(replacement)
+        
+    # 5. Transform CriticMarkup
+    # Highlight
+    for mark in soup.find_all('mark'):
+        mark.name = 'span'
+        # Yellow background for Word
+        mark['style'] = "background-color: #ffff00;"
+        
+    # Insert (Underline)
+    for ins in soup.find_all('ins'):
+        ins.name = 'u'
+        
+    # Delete (Strikethrough)
+    for delete in soup.find_all('del'):
+        delete.name = 's'
+
+    # 6. Transform Definition Lists (dl, dt, dd) -> Bold + Indent
+    for dl in soup.find_all('dl'):
+        # We unwrap the dl, and style dt/dd
+        for dt in dl.find_all('dt'):
+            dt.name = 'p'
+            b = soup.new_tag('b')
+            b.string = dt.get_text(strip=True)
+            dt.string = ''
+            dt.append(b)
+            dt['style'] = "margin-top: 8px; margin-bottom: 2px;"
+            
+        for dd in dl.find_all('dd'):
+            dd.name = 'p'
+            dd['style'] = "margin-left: 20px; margin-bottom: 8px;"
+            
+        dl.unwrap()
+
+    # 7. Transform Math (.katex) -> Code Block
+    # The accessible text is often messy. We prefer the raw TeX if available.
+    for katex_span in soup.find_all(class_='katex'):
+        # Try to find the annotation (TeX source)
+        annotation = katex_span.find('annotation', {'encoding': 'application/x-tex'})
+        tex_source = annotation.get_text(strip=True) if annotation else None
+        
+        if not tex_source:
+             # Fallback to visually hidden text if available, or just the text
+             mathml = katex_span.find(class_='katex-mathml')
+             if mathml:
+                 # It's usually good enough
+                 tex_source = mathml.get_text(strip=True)
+             else:
+                 tex_source = katex_span.get_text(strip=True)
+
+        # Create a Code Block look-alike
+        code_p = soup.new_tag('p')
+        code_p['style'] = "font-family: monospace; background-color: #f0f0f0; padding: 4px; border: 1px solid #ccc;"
+        code_p.string = f"Equation: {tex_source}"
+        
+        katex_span.replace_with(code_p)
+
+
+
 def export_to_word(html_content: str) -> bytes:
     """
     Exports HTML content to a Word (.docx) file byte stream.
@@ -130,6 +302,10 @@ def export_to_word(html_content: str) -> bytes:
     # Cleaning (Scripts, Styles, Nav)
     for tag in soup.find_all(['script', 'style', 'nav']):
         tag.decompose()
+        
+    # Transform Complex HTML for Word Compatibility
+    # (Tabs, Alerts, Details, Math, etc.)
+    transform_html_for_word(soup)
     
     # Main Content Extraction
     # We want to include the Table of Contents (.toc-container) AND the Markdown Content (.markdown-content)
