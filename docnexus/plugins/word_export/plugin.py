@@ -34,19 +34,84 @@ def add_bookmark(paragraph, bookmark_name):
     paragraph._element.insert(0, bookmark_start)
     paragraph._element.append(bookmark_end)
 
+# Imports for SafeHtmlToDocx and export_to_word
+try:
+    from htmldocx import HtmlToDocx
+    from docx import Document
+    from docx.shared import RGBColor, Pt
+    from docx.oxml import OxmlElement
+    from docx.oxml.ns import qn
+    from docx.enum.text import WD_ALIGN_PARAGRAPH, WD_COLOR
+    import re
+except ImportError as e:
+    # Defer error handling to export_to_word if these are not available
+    # This allows the module to load even if docx dependencies are missing
+    HtmlToDocx = None
+    Document = None
+    RGBColor = None
+    Pt = None
+    OxmlElement = None
+    qn = None
+    WD_ALIGN_PARAGRAPH = None
+    WD_COLOR = None
+    re = None
+    _word_export_import_error = e
+
+class SafeHtmlToDocx(HtmlToDocx):
+    """
+    Subclass of HtmlToDocx to fix fragile color parsing that crashes on invalid hex/rgb strings.
+    Overrides add_styles_to_run to add try/except blocks.
+    """
+    def add_styles_to_run(self, style):
+        if 'color' in style:
+            try:
+                if 'rgb' in style['color']:
+                    color = re.sub(r'[a-z()]+', '', style['color'])
+                    # Filter empty strings from split to avoid int('') crash
+                    parts = [x.strip() for x in color.split(',') if x.strip()]
+                    if len(parts) >= 3:
+                        colors = [int(p) for p in parts[:3]]
+                        self.run.font.color.rgb = RGBColor(*colors)
+                elif '#' in style['color']:
+                    color = style['color'].strip().lstrip('#')
+                    # Handle 3-digit hex by expanding
+                    if len(color) == 3:
+                         color = ''.join([c*2 for c in color])
+                    # Parse if valid length (6 or 8 - ignore alpha for now)
+                    if len(color) >= 6:
+                        colors = tuple(int(color[i:i+2], 16) for i in (0, 2, 4))
+                        self.run.font.color.rgb = RGBColor(*colors)
+                else:
+                    # Named colors or other formats - ignored to prevent crash
+                    pass
+            except Exception:
+                # Silently ignore invalid colors (e.g. empty hex, bad values)
+                pass
+            
+        if 'background-color' in style:
+            try:
+                # We reuse the logic but htmldocx maps background to highlight
+                # This is less critical but good to protect
+                if 'rgb' in style['background-color']:
+                    color = re.sub(r'[a-z()]+', '', style['background-color'])
+                    parts = [x.strip() for x in color.split(',') if x.strip()]
+                    if len(parts) >= 3:
+                        pass # htmldocx logic for background is limited to highlight enum
+                elif '#' in style['background-color']:
+                    pass 
+                
+                # Original htmldocx logic basically defaults to GRAY_25 or nothing
+                # We just protect against the crash, we don't fix the mapping deficiency
+                # self.run.font.highlight_color = WD_COLOR.GRAY_25 
+            except Exception:
+                pass
+
 def export_to_word(html_content: str) -> bytes:
     """
     Exports HTML content to a Word (.docx) file byte stream.
     """
-    try:
-        from htmldocx import HtmlToDocx
-        from docx import Document
-        from docx.shared import RGBColor, Pt
-        from docx.oxml import OxmlElement
-        from docx.oxml.ns import qn
-        from docx.enum.text import WD_ALIGN_PARAGRAPH
-    except ImportError as e:
-        logger.error(f"Failed to import Word export dependencies: {e}")
+    if HtmlToDocx is None:
+        logger.error(f"Failed to import Word export dependencies: {_word_export_import_error}")
         raise RuntimeError("Word export dependencies (htmldocx, python-docx) not installed.")
 
     # Size Check
@@ -106,7 +171,7 @@ def export_to_word(html_content: str) -> bytes:
         # Style Tables for Word (Apply to all tables in selected content)
         for part in selected_content:
             for table in part.find_all('table'):
-                table['style'] = 'border-collapse: collapse; width: 100%; border: 2px solid rgba(99, 102, 241, 0.2); margin-bottom: 20px;'
+                table['style'] = 'border-collapse: collapse; width: 100%; border: 2px solid #6366f1; margin-bottom: 20px;'
                 table['border'] = '1'
                 
                 # Thead check
@@ -283,14 +348,31 @@ def export_to_word(html_content: str) -> bytes:
                         if prop in ['stroke', 'stroke-width', 'fill', 'fill-opacity', 'stroke-opacity']:
                             continue
                             
-                        # Strip color values that aren't strict hex/rgb (causes base 16 error)
-                        if 'color' in prop: # color, background-color, border-color
-                             if val in ['none', 'auto', 'transparent', 'inherit', 'initial', 'unset']:
-                                 continue
-                             # Try to protect against 'rgba(0,0,0,0)' if htmldocx doesn't support it (it usually doesn't)
-                             if 'rgba' in val:
-                                 continue
-
+                        # Strip unsupported values that cause htmldocx to crash (base 16 error)
+                        # This includes 'transparent', 'currentColor', 'var(...)', 'inherit', empty strings, and 'rgb/rgba'
+                        if any(x in val for x in ['transparent', 'currentcolor', 'var(', 'inherit', 'initial', 'unset', 'rgb', 'rgba']):
+                             continue
+                        
+                        if not val: # Empty value
+                             continue
+                             
+                        # Explicit check for keywords if they are the ONLY value (e.g. color: none)
+                        if val in ['none', 'auto']:
+                             continue
+                        
+                        # HEX Validation: If it looks like a hex color, it MUST be valid
+                        # htmldocx crashes on '#' or invalid hex with int('', 16)
+                        if '#' in val:
+                            import re
+                            # Check if the value is purely a hex code (allow for !important suffix which we don't prefer but might exist)
+                            # We strip !important for the check
+                            clean_val = val.replace('!important', '').strip()
+                            if clean_val.startswith('#'):
+                                # It's a hex color. Validate it.
+                                if not re.match(r'^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$', clean_val):
+                                    # Invalid hex (e.g. '#', '#12', '#xyz')
+                                    continue
+ 
                         clean_styles.append(s)
                 
                 if clean_styles:
@@ -306,12 +388,21 @@ def export_to_word(html_content: str) -> bytes:
         for tag in soup.find_all(attrs={"viewbox": True}):
              del tag['viewbox'] # Clean up any lingering SVG debris
 
+
+
         clean_html = str(soup)
 
         # Generate Word Doc
         doc = Document()
-        new_parser = HtmlToDocx()
+        new_parser = SafeHtmlToDocx()
         
+        # Debug: Dump HTML to investigate crash
+        try:
+            with open('debug_export.html', 'w', encoding='utf-8') as f:
+                f.write(clean_html)
+        except:
+            pass
+
         try:
             # Now safe to convert
             new_parser.add_html_to_document(clean_html, doc)
