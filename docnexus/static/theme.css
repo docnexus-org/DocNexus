@@ -749,3 +749,20 @@ details>summary {
 details>summary:hover {
     color: var(--color-accent-primary);
 }
+
+/* Definition List UX Improvement */
+dl {
+    margin: var(--space-3) 0;
+}
+
+dt {
+    font-weight: 600;
+    margin-top: var(--space-2);
+    color: var(--color-text-primary);
+}
+
+dd {
+    margin-left: var(--space-4);
+    margin-bottom: var(--space-2);
+    color: var(--color-text-secondary);
+}
