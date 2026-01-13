@@ -827,3 +827,63 @@ kbd {
     margin: 0 2px;
     vertical-align: middle;
 }
+
+/* Tabbed Interface (pymdownx.tabbed) */
+.tabbed-set {
+    display: flex;
+    flex-wrap: wrap;
+    position: relative;
+    border-radius: var(--radius-md);
+    margin: var(--space-3) 0;
+    border: 1px solid var(--color-border-default);
+    background: var(--color-bg-primary);
+}
+
+.tabbed-set>input {
+    display: none;
+}
+
+.tabbed-set>label {
+    order: 1;
+    padding: 10px 16px;
+    cursor: pointer;
+    font-size: 0.9rem;
+    font-weight: 500;
+    color: var(--color-text-secondary);
+    border-bottom: 2px solid transparent;
+    transition: all 0.2s;
+    user-select: none;
+    background: var(--color-bg-secondary);
+    border-right: 1px solid var(--color-border-default);
+}
+
+.tabbed-set>label:first-of-type {
+    border-radius: var(--radius-md) 0 0 0;
+}
+
+.tabbed-set>label:hover {
+    color: var(--color-text-primary);
+    background: var(--color-surface-hover);
+}
+
+/* Active Tab Styling */
+.tabbed-set>input:checked+label {
+    color: var(--color-accent-primary);
+    border-bottom-color: var(--color-accent-primary);
+    background: var(--color-bg-primary);
+}
+
+.tabbed-set>.tabbed-content {
+    order: 2;
+    width: 100%;
+    display: none;
+    padding: var(--space-3);
+    background: var(--color-bg-primary);
+    border-radius: 0 0 var(--radius-md) var(--radius-md);
+    border-top: 1px solid var(--color-border-default);
+}
+
+/* Content Switching Logic */
+.tabbed-set>input:checked+label+.tabbed-content {
+    display: block;
+}
