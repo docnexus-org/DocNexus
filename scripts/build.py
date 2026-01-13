@@ -221,13 +221,16 @@ def build(build_type="Dev"):
         "pymdownx.inlinehilite", "pymdownx.keys", "pymdownx.smartsymbols",
         "pymdownx.snippets", "pymdownx.tilde", "pymdownx.caret",
         "pymdownx.mark", "pymdownx.emoji", "pymdownx.saneheaders",
+        # "pymdownx.smarty", # Removed
+        "pymdownx.critic",
+        "markdown.extensions.meta", "markdown.extensions.wikilinks", "markdown.extensions.smarty",
         # Core Plugins
         "docnexus.plugins.editor",
         "docnexus.plugins.editor.routes",
     ]
     
     # Dynamic collection for complex packages
-    for pkg in ["xhtml2pdf", "reportlab", "html5lib", "lxml", "docx", "bs4", "htmldocx"]:
+    for pkg in ["xhtml2pdf", "reportlab", "html5lib", "lxml", "docx", "bs4", "htmldocx", "pymdownx", "markdown"]:
         hidden_imports.extend(get_hidden_imports_from_venv(pkg))
 
     for imp in hidden_imports:

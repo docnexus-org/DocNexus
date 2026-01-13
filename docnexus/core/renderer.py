@@ -163,6 +163,9 @@ def render_baseline(md_text: str) -> str:
             "pymdownx.arithmatex": {
                 "generic": True,
             },
+            "pymdownx.caret": {
+                "insert": True,
+            },
             "pymdownx.superfences": {
                 "custom_fences": [
                     {
@@ -179,6 +182,13 @@ def render_baseline(md_text: str) -> str:
         }
     )
     
+    
+    # Custom Inline Patterns
+    # ++Insert++ -> <ins>Insert</ins>
+    from markdown.inlinepatterns import SimpleTagPattern
+    INS_PATTERN = r'(\+\+)(.+?)(\+\+)'
+    md_instance.inlinePatterns.register(SimpleTagPattern(INS_PATTERN, 'ins'), 'ins', 175)
+
     logger.debug(f"Render baseline: {len(md_text)} chars input")
     html_output = md_instance.convert(md_text)
     
