@@ -63,6 +63,7 @@ Link to an internal page: [[feature_test_v1.2.6]]
 ### 2.3 Math (Arithmatex)
 - Inline: $E=mc^2$
 - Block:
+
 $$
 \frac{n!}{k!(n-k)!} = \binom{n}{k}
 $$
