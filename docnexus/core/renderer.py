@@ -163,9 +163,7 @@ def render_baseline(md_text: str) -> str:
             "pymdownx.arithmatex": {
                 "generic": True,
             },
-            "pymdownx.caret": {
-                "insert": True,
-            },
+            # "pymdownx.caret": {"insert": True}, # Disabled to allow keys to use ++
             "pymdownx.superfences": {
                 "custom_fences": [
                     {
@@ -178,17 +176,27 @@ def render_baseline(md_text: str) -> str:
             "pymdownx.emoji": {
                 "emoji_index": pymdownx.emoji.gemoji,
                 "emoji_generator": pymdownx.emoji.to_svg,
-            } 
+            },
+            "pymdownx.keys": {
+                "key_map": {
+                    'cmd': '⌘',
+                    'shift': '⇧',
+                    'alt': '⌥',
+                    'ctrl': '⌃',
+                    'enter': '⏎',
+                    'delete': '⌫',
+                    'backspace': '⌫',
+                    'esc': '⎋',
+                    'tab': '⇥',
+                    'up': '↑',
+                    'down': '↓',
+                    'left': '←',
+                    'right': '→'
+                }
+            }
         }
     )
     
-    
-    # Custom Inline Patterns
-    # ++Insert++ -> <ins>Insert</ins>
-    from markdown.inlinepatterns import SimpleTagPattern
-    INS_PATTERN = r'(\+\+)(.+?)(\+\+)'
-    md_instance.inlinePatterns.register(SimpleTagPattern(INS_PATTERN, 'ins'), 'ins', 175)
-
     logger.debug(f"Render baseline: {len(md_text)} chars input")
     html_output = md_instance.convert(md_text)
     
