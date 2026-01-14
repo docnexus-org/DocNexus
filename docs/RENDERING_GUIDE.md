@@ -35,10 +35,10 @@ Do NOT assume the export library supports your CSS.
 
 | Feature | HTML | Word Strategy | PDF Strategy |
 | :--- | :--- | :--- | :--- |
-| **Alerts** | `<div class="admonition">` | Convert to `Table` (1x1). Inject `w:shd` (Shading) for BG. Force Emoji font for icon. | Supports `div` bg/border natively. |
-| **Math** | `<span class="katex">` | Extract TeX source. Wrap in `Code Block` (Gray BG). | Render formatting or image (Current WIP). |
+| **Alerts** | `<div class="admonition">` | Convert to `Table` (1x1). Inject `w:shd` (Shading) for BG. Force Emoji font for icon. | Convert to `Table` (1x1). Flatten content to `inline` flow. |
+| **Math** | `<span class="katex">` | Extract TeX source. Wrap in `Code Block` (Gray BG). | Extract TeX source. Wrap in `Code Block` (Gray BG). |
 | **Highlights** | `<mark>` | Map `bg-color` to `WD_COLOR` Highlight enum. | Supports `background-color` natively. |
-| **Icons** | CSS `::before` (Mask) | Hard replace with Emoji text (ℹ️) in HTML transform. | Supports CSS pseudo-elements. |
+| **Icons** | CSS `::before` (Mask) | Hard replace with Emoji text (ℹ️) in HTML transform. | **Base64 Images**: Text Emojis fail in PDF. We inject `<img>` with Base64 PNGs. |
 
 ## Troubleshooting Word Export
 -   **Missing Colors**: `htmldocx` ignores most `background-color`. Use `SafeHtmlToDocx` overrides to inject `w:shd`.
