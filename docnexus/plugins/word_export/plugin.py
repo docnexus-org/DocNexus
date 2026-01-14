@@ -38,7 +38,7 @@ def add_bookmark(paragraph, bookmark_name):
 try:
     from htmldocx import HtmlToDocx
     from docx import Document
-    from docx.shared import RGBColor, Pt
+    from docx.shared import RGBColor, Pt, Inches
     from docx.oxml import OxmlElement
     from docx.oxml.ns import qn
     from docx.enum.text import WD_ALIGN_PARAGRAPH, WD_COLOR
@@ -67,52 +67,83 @@ class SafeHtmlToDocx(HtmlToDocx):
             try:
                 if 'rgb' in style['color']:
                     color = re.sub(r'[a-z()]+', '', style['color'])
-                    # Filter empty strings from split to avoid int('') crash
                     parts = [x.strip() for x in color.split(',') if x.strip()]
                     if len(parts) >= 3:
                         colors = [int(p) for p in parts[:3]]
                         self.run.font.color.rgb = RGBColor(*colors)
                 elif '#' in style['color']:
                     color = style['color'].strip().lstrip('#')
-                    # Handle 3-digit hex by expanding
-                    if len(color) == 3:
-                         color = ''.join([c*2 for c in color])
-                    # Parse if valid length (6 or 8 - ignore alpha for now)
+                    if len(color) == 3: color = ''.join([c*2 for c in color])
                     if len(color) >= 6:
                         colors = tuple(int(color[i:i+2], 16) for i in (0, 2, 4))
                         self.run.font.color.rgb = RGBColor(*colors)
-                else:
-                    # Named colors or other formats - ignored to prevent crash
-                    pass
-            except Exception:
-                # Silently ignore invalid colors (e.g. empty hex, bad values)
-                pass
+            except Exception: pass
             
         if 'background-color' in style:
             try:
-                # We reuse the logic but htmldocx maps background to highlight
-                # This is less critical but good to protect
-                if 'rgb' in style['background-color']:
-                    color = re.sub(r'[a-z()]+', '', style['background-color'])
-                    parts = [x.strip() for x in color.split(',') if x.strip()]
-                    if len(parts) >= 3:
-                        pass # htmldocx logic for background is limited to highlight enum
-                elif '#' in style['background-color']:
-                    pass 
-                
-                # Original htmldocx logic basically defaults to GRAY_25 or nothing
-                # We just protect against the crash, we don't fix the mapping deficiency
-                # self.run.font.highlight_color = WD_COLOR.GRAY_25 
-            except Exception:
-                pass
+                bg = style['background-color'].lower()
+                # CriticMarkup Mapping
+                if '#ffff00' in bg: self.run.font.highlight_color = WD_COLOR.YELLOW
+                elif '#008000' in bg: self.run.font.highlight_color = WD_COLOR.BRIGHT_GREEN
+                elif '#ff0000' in bg: self.run.font.highlight_color = WD_COLOR.RED
+                else: pass
+            except Exception: pass
+            
+        # Text Decoration (Strike/Underline) from styles
+        if 'text-decoration' in style:
+            if 'line-through' in style['text-decoration']:
+                self.run.font.strike = True
+            if 'underline' in style['text-decoration']:
+                self.run.font.underline = True
+
+        # Font Family Support (For Emojis)
+        if 'font-family' in style:
+            try:
+                # Log font found
+                # logger.info(f"Font Family Found: {style['font-family']}")
+                fonts = style['font-family'].split(',')
+                if fonts:
+                    primary_font = fonts[0].strip().replace("'", "").replace('"', "")
+                    self.run.font.name = primary_font
+            except Exception: pass
+
+    def add_styles_to_paragraph(self, style):
+        # Override to support background-color (Shading) for Math Blocks
+        super().add_styles_to_paragraph(style)
+        
+        if 'background-color' in style:
+            try:
+                color = style['background-color'].strip().lstrip('#')
+                if len(color) == 3: color = ''.join([c*2 for c in color])
+                if len(color) >= 6:
+                    # Log finding color
+                    # logger.info(f"Injecting Paragraph Shading: {color}")
+                    pPr = self.paragraph._p.get_or_add_pPr()
+                    shd = OxmlElement('w:shd')
+                    shd.set(qn('w:val'), 'clear')
+                    shd.set(qn('w:fill'), color)
+                    
+                    # Schema Order for pPr: ... pBdr, shd, tabs, spacing, ind, jc, rPr ...
+                    successors = ['w:tabs', 'w:spacing', 'w:ind', 'w:jc', 'w:rPr']
+                    target = None
+                    for s in successors:
+                        target = pPr.find(qn(s))
+                        if target is not None:
+                            break
+                    
+                    if target is not None:
+                        pPr.insert_element_before(shd, target.tag)
+                    else:
+                        pPr.append(shd)
+            except Exception as e:
+                logger.error(f"Error injecting shading: {e}")
 
 
-def transform_html_for_word(soup):
+def transform_html_for_word(soup: BeautifulSoup):
     """
-    Transforms complex/interactive HTML elements into simpler, Word-compatible structures.
-    Target: htmldocx compatibility.
+    Transforms HTML elements into Word-friendly structures.
+    Modifies the soup in-place.
     """
-    
     # 1. Transform Tabs (.tabbed-set) -> Vertical Headings + Content
     # Structure: .tabbed-set > input, label, .tabbed-content
     for tab_set in soup.find_all(class_='tabbed-set'):
@@ -121,6 +152,95 @@ def transform_html_for_word(soup):
         
         # Iterate over labels and corresponding content
         labels = tab_set.find_all('label')
+        # ... logic for tabs ...
+        # (Assuming existing logic is fine, just referencing start)
+
+    # 2. Transform Collapsible Details -> DIV with Bold Header
+    for details in soup.find_all('details'):
+        summary = details.find('summary')
+        summary_text = summary.get_text().strip() if summary else "Details"
+        
+        container = soup.new_tag('div')
+        container['style'] = "border: 1px solid #ccc; padding: 10px; margin: 10px 0; background-color: #f9f9f9;"
+        
+        header = soup.new_tag('p')
+        header_b = soup.new_tag('strong')
+        # Use a simpler arrow character for Word compatibility
+        header_b.string = f"► {summary_text}"
+        header.append(header_b)
+        
+        container.append(header)
+        
+        # Move content
+        for child in list(details.contents):
+            if child.name != 'summary':
+                container.append(child)
+                
+        details.replace_with(container)
+
+    # 3. Transform Emojis -> Colored Span (VS16)
+    # Iterate text nodes to find emojis? No, standard emoji rendering usually relies on font.
+    # If the user has raw emoji characters, we wrap them.
+    # ... existing emoji logic ...
+
+    # 4. Transform Math (KaTeX/MathJax) -> Clean TeX
+    # Target: .katex-mathml annotation[encoding="application/x-tex"]
+    # This is the Gold Standard for KaTeX fidelity.
+    
+    # First, handle KaTeX specific structure
+    for katex_node in soup.find_all(class_='katex'):
+        try:
+            # Find the semantic annotation
+            annotation = katex_node.find('annotation', attrs={'encoding': 'application/x-tex'})
+            if annotation:
+                tex_code = annotation.get_text().strip()
+                
+                # Check if it's display mode (block)
+                # KaTeX usually has class 'katex-display' on a parent or 'display' attribute
+                is_block = False
+                parent = katex_node.parent
+                if parent and 'katex-display' in (parent.get('class') or []):
+                    is_block = True
+                
+                # Create replacement
+                # We wrap in a code style so it stands out but is readable
+                new_node = soup.new_tag('span')
+                if is_block:
+                    new_node.string = f"\n$$ {tex_code} $$\n"
+                    new_node['style'] = "display: block; margin: 10px 0; font-family: 'Courier New', monospace; color: #333;"
+                else:
+                    new_node.string = f" ${tex_code}$ "
+                    new_node['style'] = "font-family: 'Courier New', monospace; color: #333;"
+                
+                # If wrapped in .arithmatex, replace THAT container
+                root_node = katex_node
+                if parent and 'arithmatex' in (parent.get('class') or []):
+                    root_node = parent
+                elif parent and parent.name == 'span' and 'katex-display' in (parent.get('class') or []):
+                     # Handle <span class="katex-display"><span class="katex">...</span></span>
+                     # Check if *that* is in arithmatex
+                     grandparent = parent.parent
+                     if grandparent and 'arithmatex' in (grandparent.get('class') or []):
+                         root_node = grandparent
+                     else:
+                         root_node = parent
+
+                root_node.replace_with(new_node)
+                continue
+        except Exception as e:
+            logger.warning(f"Failed to process KaTeX node: {e}")
+
+    # Legacy MathJax Fallback
+    for script in soup.find_all('script', type='math/tex'):
+        tex = script.get_text()
+        new_span = soup.new_tag('span')
+        new_span.string = f"${tex}$"
+        script.replace_with(new_span)
+        
+    # Remove Preview/Dummy spans
+    for junk in soup.find_all(class_=['MathJax_Preview', 'katex-html']):
+        junk.decompose()
+
         contents = tab_set.find_all(class_='tabbed-content')
         
         for i, label in enumerate(labels):
@@ -162,33 +282,39 @@ def transform_html_for_word(soup):
 
     # 3. Transform GitHub Alerts (.admonition) -> Single-Cell Tables
     # htmldocx doesn't support complex borders/backgrounds on divs well.
-    alert_colors = {
-        'note': '#0969da',
-        'tip': '#1a7f37',
-        'important': '#8250df',
-        'warning': '#bf8700',
-        'caution': '#d1242f',
-        'danger': '#d1242f'
+    alert_themes = {
+        'note':      {'border': '#0969da', 'bg': '#e6f6ff', 'icon': 'ℹ️'},  # Blue
+        'tip':       {'border': '#1a7f37', 'bg': '#dafbe1', 'icon': '💡'},  # Green
+        'important': {'border': '#8250df', 'bg': '#f3e6ff', 'icon': '📣'},  # Purple
+        'warning':   {'border': '#bf8700', 'bg': '#fff8c5', 'icon': '⚠️'},  # Amber (Fixed Hex)
+        'caution':   {'border': '#d1242f', 'bg': '#ffebe9', 'icon': '🛑'},  # Red
+        'danger':    {'border': '#d1242f', 'bg': '#ffebe9', 'icon': '⚡'}   # Red/Danger
     }
     
     for admonition in soup.find_all(class_='admonition'):
         # Determine type/color
         classes = admonition.get('class', [])
         color = '#0969da' # Default Blue
+        bg_color = '#e6f6ff' # Default Light Blue
+        icon = 'ℹ️'
         alert_type = 'NOTE'
         
-        for cls, hex_code in alert_colors.items():
+        for cls, theme in alert_themes.items():
             if cls in classes:
-                color = hex_code
+                color = theme['border']
+                bg_color = theme['bg']
+                icon = theme['icon']
                 alert_type = cls.upper()
                 break
         
-        # Create Table
         table = soup.new_tag('table')
-        table['style'] = f"border-collapse: collapse; width: 100%; border-left: 4px solid {color}; background-color: #f8f9fa;"
+        # Add marker class so we can skip global table styling later
+        table['class'] = 'docnexus-alert-table'
+        # Use full border as htmldocx/Word support for partial borders is flaky
+        table['style'] = f"border-collapse: collapse; width: 100%; border: 2px solid {color}; background-color: {bg_color};"
         tr = soup.new_tag('tr')
         td = soup.new_tag('td')
-        td['style'] = "padding: 8px;"
+        td['style'] = f"padding: 8px; background-color: {bg_color};" # Apply BG to TD as well for safety
         
         # Extract Title
         title = admonition.find(class_='admonition-title')
@@ -196,24 +322,116 @@ def transform_html_for_word(soup):
             # Create a bold paragraph for the title
             title_p = soup.new_tag('p')
             title_b = soup.new_tag('b')
-            title_b.string = title.get_text(strip=True) or alert_type
-            title_b['style'] = f"color: {color};"
+            title_span = soup.new_tag('span')
+            
+            title_text = title.get_text(strip=True) or alert_type
+            title_span.string = f"{icon} {title_text}"
+            
+            # Force Emoji Font for color rendering (applied to span, as b tag styles might be ignored)
+            # Simplify font string to avoid parsing issues with quotes/commas
+            title_span['style'] = f"color: {color}; font-family: Segoe UI Emoji;"
+            
+            title_b.append(title_span)
             title_p.append(title_b)
             td.append(title_p)
             title.decompose()
         
         # Move remaining content to TD
         # We need to copy children one by one to avoid issues while modifying the tree
-        content_items = list(admonition.contents)
-        for item in content_items:
-            td.append(item)
+        # td.append(title_p) # This line is a duplicate from the snippet, removed.
             
+        # Move content to cell
+        content_div = soup.new_tag('div')
+        # Move siblings of title to content_div? No, GitHub Alerts flat structure is tricky.
+        # Usually alert content follows the Title blockquote or similar.
+        # But here we are assuming the whole 'alert' div content is what we want.
+        # We already decomposed title, so the rest is content.
+        for child in list(admonition.contents):
+            content_div.append(child)
+            
+        td.append(content_div)
         tr.append(td)
         table.append(tr)
-        
         admonition.replace_with(table)
 
-    # 4. Transform Task Lists -> Text [x] / [ ]
+    # 4. Transform Details (Collapsible) -> Styled Block
+    # <details><summary>Title</summary>Content</details>
+    for details in soup.find_all('details'):
+        summary = details.find('summary')
+        
+        # Create container div
+        container = soup.new_tag('div')
+        container['style'] = "border: 1px solid #cccccc; padding: 10px; margin: 10px 0; background-color: #fafafa;"
+        
+        # Handle Title
+        title_p = soup.new_tag('p')
+        title_b = soup.new_tag('b')
+        if summary:
+            # Add icon and text
+            title_b.string = f"▶ {summary.get_text(strip=True)}"
+            summary.decompose() # Remove summary from details content
+        else:
+            title_b.string = "▶ Details"
+        
+        title_p.append(title_b)
+        container.append(title_p)
+        
+        # Handle Content (Remaining children of details)
+        content_div = soup.new_tag('div')
+        content_div['style'] = "margin-top: 5px; margin-left: 15px;"
+        
+        # Move remaining contents
+        for child in list(details.contents):
+             content_div.append(child)
+             
+        container.append(content_div)
+        details.replace_with(container)
+
+    # 5. Transform Emojis (Wrap in Font Span)
+    # Walk text nodes to find emojis and wrap them
+    import re
+    # Regex for common emojis (including supplementary pairs)
+    # Simplified regex for the requested ones + ranges
+    emoji_pattern = re.compile(r'[\U0001F600-\U0001F64F\U0001F300-\U0001F5FF\U0001F680-\U0001F6FF\U0001F700-\U0001F77F\U0001F780-\U0001F7FF\U0001F800-\U0001F8FF\U0001F900-\U0001F9FF\U0001FA00-\U0001FA6F\u2600-\u26FF\u2700-\u27BF]')
+    
+    # We iterate a list of text nodes to modify them safely
+    for text_node in soup.find_all(string=True):
+        if text_node.parent and text_node.parent.name in ['script', 'style']:
+            continue
+            
+        if emoji_pattern.search(text_node):
+            # If emoji found, we need to split and wrap
+            new_content = []
+            last_idx = 0
+            for match in emoji_pattern.finditer(text_node):
+                start, end = match.span()
+                # Text before
+                if start > last_idx:
+                    new_content.append(soup.new_string(text_node[last_idx:start]))
+                
+                # Emoji Wrapped
+                emoji_span = soup.new_tag('span')
+                # Append VS16 (\ufe0f) to force Emoji Presentation
+                emoji_char = text_node[start:end]
+                if not emoji_char.endswith('\ufe0f'):
+                     emoji_char += '\ufe0f'
+                
+                emoji_span['style'] = "font-family: 'Segoe UI Emoji', sans-serif;"
+                emoji_span.string = emoji_char
+                new_content.append(emoji_span)
+                
+                last_idx = end
+            
+            # Text after
+            if last_idx < len(text_node):
+                new_content.append(soup.new_string(text_node[last_idx:]))
+            
+            # Replace text node with new structure
+            # We use a span as a container if parent allows, or insert sibling
+            # replace_with allows passing multiple arguments!
+            text_node.replace_with(*new_content)
+
+    # 6. Transform Task Lists -> Text [x] / [ ]
     for checkbox in soup.find_all('input', {'type': 'checkbox'}):
         is_checked = checkbox.has_attr('checked')
         replacement = soup.new_tag('span')
@@ -221,20 +439,22 @@ def transform_html_for_word(soup):
         replacement['style'] = "font-family: monospace;"
         checkbox.replace_with(replacement)
         
-    # 5. Transform CriticMarkup
+    # 5. Transform CriticMarkup (Legacy numbering, keeping order)
     # Highlight
     for mark in soup.find_all('mark'):
         mark.name = 'span'
-        # Yellow background for Word
+        # Yellow background for Word (will be mapped in add_styles_to_run override)
         mark['style'] = "background-color: #ffff00;"
         
     # Insert (Underline)
     for ins in soup.find_all('ins'):
-        ins.name = 'u'
+        ins.name = 'span'
+        ins['style'] = "color: #008000; text-decoration: underline;" # Green text + underline
         
     # Delete (Strikethrough)
     for delete in soup.find_all('del'):
-        delete.name = 's'
+        delete.name = 'span'
+        delete['style'] = "color: #ff0000; text-decoration: line-through;" # Red text + strike
 
     # 6. Transform Definition Lists (dl, dt, dd) -> Bold + Indent
     for dl in soup.find_all('dl'):
@@ -253,28 +473,64 @@ def transform_html_for_word(soup):
             
         dl.unwrap()
 
-    # 7. Transform Math (.katex) -> Code Block
-    # The accessible text is often messy. We prefer the raw TeX if available.
-    for katex_span in soup.find_all(class_='katex'):
-        # Try to find the annotation (TeX source)
-        annotation = katex_span.find('annotation', {'encoding': 'application/x-tex'})
-        tex_source = annotation.get_text(strip=True) if annotation else None
-        
-        if not tex_source:
-             # Fallback to visually hidden text if available, or just the text
-             mathml = katex_span.find(class_='katex-mathml')
-             if mathml:
-                 # It's usually good enough
-                 tex_source = mathml.get_text(strip=True)
-             else:
-                 tex_source = katex_span.get_text(strip=True)
+    # 7. Transform Math (.katex / .arithmatex) -> Code Block
+    # 7a. Block Math
+    # Arithmatex generic output uses class="arithmatex" and \[ ... \]
+    for display_math in soup.find_all(class_='arithmatex'):
+        # Check if it's block math (usually has \[ ... \])
+            # Clean TeX: Robust extraction
+            # 1. Check for script tag (MathJax non-generic)
+            script_tex = display_math.find('script', type='math/tex')
+            if script_tex:
+                clean_tex = script_tex.get_text(strip=True)
+            else:
+                # 2. Generic Mode: Remove accessible/preview garbage
+                # Remove MathJax_Preview if present
+                for preview in display_math.find_all(class_='MathJax_Preview'):
+                    preview.decompose()
+                
+                text = display_math.get_text(strip=True)
+                # Try Regex for delimiters
+                import re
+                match = re.search(r'\\\[(.*?)\\\]', text, re.DOTALL)
+                if match:
+                    clean_tex = match.group(1).strip()
+                else:
+                    # Fallback: remove delimiters manually if regex fails but structure implies standard generic
+                    clean_tex = text.replace(r'\[', '').replace(r'\]', '').strip()
+            
+            # Create Block
+            code_p = soup.new_tag('p')
+            code_p['style'] = "background-color: #f0f0f0; padding: 8px; border: 1px solid #ccc; margin: 10px 0;"
+            
+            # Word needs the FONT style on the run (span), not the paragraph (p)
+            code_span = soup.new_tag('span')
+            code_span['style'] = "font-family: 'Courier New', monospace;"
+            code_span.string = clean_tex
+            
+            code_p.append(code_span)
+            display_math.replace_with(code_p)
 
-        # Create a Code Block look-alike
-        code_p = soup.new_tag('p')
-        code_p['style'] = "font-family: monospace; background-color: #f0f0f0; padding: 4px; border: 1px solid #ccc;"
-        code_p.string = f"Equation: {tex_source}"
+    # 7b. Inline Math (.katex) -> Inline Code Span
+    for katex_span in soup.find_all(class_='katex'):
+        # Skip if we just processed it inside a display block (orphaned check)
+        if katex_span.find_parent(class_='katex-display'):
+             continue
+             
+        # Try to find annotation or script
+        annotation = katex_span.find('annotation', {'encoding': 'application/x-tex'})
+        if annotation:
+            tex_source = annotation.get_text(strip=True)
+        else:
+            # Fallback for inline
+            tex_source = katex_span.get_text(strip=True)
         
-        katex_span.replace_with(code_p)
+        # Create Inline Span
+        code_span = soup.new_tag('span')
+        code_span['style'] = "font-family: monospace; background-color: #f0f0f0;"
+        code_span.string = f" {tex_source} "
+        
+        katex_span.replace_with(code_span)
 
 
 
@@ -344,9 +600,25 @@ def export_to_word(html_content: str) -> bytes:
              selected_content.append(md_content)
 
     if selected_content:
+        logger.info(f"WordExport: Analyzing {len(selected_content)} content parts for tables.")
+
         # Style Tables for Word (Apply to all tables in selected content)
         for part in selected_content:
             for table in part.find_all('table'):
+                # 1. Logging & Classification
+                classes = table.get('class', [])
+                # Normalize class attribute to list (bs4 can return str or list)
+                class_list = classes if isinstance(classes, list) else classes.split() if isinstance(classes, str) else []
+                
+                is_alert = 'docnexus-alert-table' in class_list
+                
+                # 2. Logic
+                if is_alert:
+                    logger.info(f"WordExport: Skipping Global Style for Alert Table. Classes={class_list}")
+                    continue
+                
+                # Standard Table Styling
+                # logger.debug(f"WordExport: Applying Global Style to Standard Table. Classes={class_list}")
                 table['style'] = 'border-collapse: collapse; width: 100%; border: 2px solid #6366f1; margin-bottom: 20px;'
                 table['border'] = '1'
                 
@@ -367,7 +639,7 @@ def export_to_word(html_content: str) -> bytes:
                 
                 for td in table.find_all('td'):
                     td['style'] = 'padding: 8px; border: 1px solid #e5e7eb;'
-        
+
         # Combine content
         combined_html = "".join([str(tag) for tag in selected_content])
         clean_html = f'<html><head><meta charset="utf-8"></head><body>{combined_html}</body></html>'
@@ -375,6 +647,7 @@ def export_to_word(html_content: str) -> bytes:
         # Capture main_content for booking logic later (use md_content reference)
         main_content = md_content if 'md_content' in locals() and md_content else None
     else:
+        logger.warning("WordExport: No 'selected_content' found to style! using absolute fallback.")
         # Absolute fallback
         clean_html = f'<html><body>{soup.body.decode_contents() if soup.body else str(soup)}</body></html>'
         main_content = None
@@ -572,19 +845,89 @@ def export_to_word(html_content: str) -> bytes:
         doc = Document()
         new_parser = SafeHtmlToDocx()
         
-        # Debug: Dump HTML to investigate crash
-        try:
-            with open('debug_export.html', 'w', encoding='utf-8') as f:
-                f.write(clean_html)
-        except:
-            pass
-
         try:
             # Now safe to convert
             new_parser.add_html_to_document(clean_html, doc)
+            
+            # -------------------------------------------------------------------------
+            # POST-PROCESSING: Apply Fidelity Styling directly to DOCX objects
+            # This bypasses htmldocx limitations by acting on the final structure.
+            # -------------------------------------------------------------------------
+            
+            # 1. Apply Alert Backgrounds (Table Shading)
+            for table in doc.tables:
+                try:
+                    # heuristic: check first cell text for Alert Icons/Text
+                    # Use 'in' logic instead of 'startswith' to handle variability in Icon unicode (VS16 etc)
+                    if not table.rows or not table.columns: continue
+                    
+                    first_cell = table.cell(0, 0)
+                    text = first_cell.text.strip()
+                    
+                    bg_color = None
+                    if "Note" in text and ("ℹ" in text or "i" in text): # Handle ℹ️
+                        bg_color = "e6f6ff" 
+                    elif "Tip" in text and "💡" in text:
+                        bg_color = "dafbe1"
+                    elif "Important" in text and "📣" in text:
+                        bg_color = "f3e6ff"
+                    elif "Warning" in text and "⚠" in text: # Handle ⚠️ (U+26A0)
+                        bg_color = "fff8c5"
+                    elif ("Caution" in text or "Danger" in text) and ("🛑" in text or "⚡" in text):
+                         bg_color = "ffebe9"
+                         
+                    if bg_color:
+                        # Apply shading to the cell
+                        tcPr = first_cell._tc.get_or_add_tcPr()
+                        
+                        # Remove existing shd if any
+                        existing_shd = tcPr.find(qn('w:shd'))
+                        if existing_shd is not None:
+                            tcPr.remove(existing_shd)
+                            
+                        shd = OxmlElement('w:shd')
+                        shd.set(qn('w:val'), 'clear')
+                        shd.set(qn('w:fill'), bg_color)
+                        
+                        # Insert in correct schema order (after tcBorders, before noWrap/tcMar/vAlign etc)
+                        # Failure to respect this causes Word to ignore the shading silently.
+                        # Successors: noWrap, tcMar, textDirection, tcFitText, vAlign, hideMark
+                        successors = ['w:noWrap', 'w:tcMar', 'w:textDirection', 'w:tcFitText', 'w:vAlign', 'w:hideMark']
+                        target = None
+                        for s in successors:
+                            target = tcPr.find(qn(s))
+                            if target is not None:
+                                break
+                                
+                        if target is not None:
+                            tcPr.insert_element_before(shd, target.tag)
+                        else:
+                            tcPr.append(shd)
+                            
+                        # Fix Icon Font (Segoe UI Emoji)
+                        # Iterate runs in the first paragraph to find the icon
+                        if first_cell.paragraphs:
+                            for run in first_cell.paragraphs[0].runs:
+                                # Heuristic: If run contains the icon character
+                                if any(icon_char in run.text for icon_char in ["ℹ", "💡", "📣", "⚠️", "🛑", "⚡"]):
+                                    run.font.name = 'Segoe UI Emoji'
+                            
+                        # Also fix borders if needed? 
+                        # htmldocx usually handles borders if HTML had them.
+                        
+                except Exception as e:
+                    logger.warning(f"WordExport: Failed to style table: {e}")
+
+            # 2. Apply Math Styling (Paragraph Shading)
+            # We identified Math blocks as code blocks. 
+            # If they didn't get styled by add_styles_to_paragraph, we can catch them here.
+            # But add_styles_to_paragraph IS strictly supported by SafeHtmlToDocx if called correctly.
+            # We'll leave Math for now as the Post-Process Table fix is the big one.
+
         except Exception as e:
             import traceback
             error_details = traceback.format_exc()
+
             logger.error(f"HtmlToDocx conversion failed: {e}", exc_info=True)
             doc.add_paragraph(f"[Export Error: Document content could not be fully converted.]")
             doc.add_paragraph(f"Details: {str(e)}")
@@ -687,12 +1030,29 @@ def export_to_word(html_content: str) -> bytes:
 
         # Post-processing (Style Table Grid)
         for table in doc.tables:
+            # Skip Alerts (Heuristic)
+            if table.rows and table.columns:
+                 first_text = table.cell(0,0).text.strip()
+                 # Reuse the robust matching logic or just check for our specific markers
+                 if ("Note" in first_text and ("ℹ" in first_text or "i" in first_text)) or \
+                    ("Tip" in first_text and "💡" in first_text) or \
+                    ("Important" in first_text and "📣" in first_text) or \
+                    ("Warning" in first_text and "⚠" in first_text) or \
+                    (("Caution" in first_text or "Danger" in first_text) and ("🛑" in first_text or "⚡" in first_text)):
+                     continue
+
             table.style = 'Table Grid'
             if len(table.rows) > 0:
                 for cell in table.rows[0].cells:
+                    # Check if cell has explicit shading already (from our Alert logic or otherwise)
+                    # Use existing tcPr to check for w:shd
+                    tcPr = cell._element.get_or_add_tcPr()
+                    if tcPr.find(qn('w:shd')) is not None:
+                        continue
+                        
                     shading_elm = OxmlElement('w:shd')
                     shading_elm.set(qn('w:fill'), '6366f1')
-                    cell._element.get_or_add_tcPr().append(shading_elm)
+                    tcPr.append(shading_elm)
 
         # Post-processing (Fix Internal Hyperlinks for TOC)
         # htmldocx creates external links for #anchors. We need to convert them to w:anchor.
