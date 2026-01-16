@@ -599,6 +599,64 @@ def transform_html_for_pdf(soup: BeautifulSoup):
             script.replace_with(new_span)
             
         # -------------------------------------------------------------------------
+        # Footnote Transformation: List -> Table (Fixes Numbering Visibility)
+        # -------------------------------------------------------------------------
+        footnote_div = soup.find('div', class_='footnote')
+        if footnote_div:
+            ol = footnote_div.find('ol')
+            if ol:
+                # Create a new table to replace the list
+                # Use legacy attributes to kill all default spacing and enforce left align
+                table = factory_soup.new_tag('table', attrs={
+                    'class': 'footnote-table',
+                    'cellspacing': '0',
+                    'cellpadding': '0',
+                    'border': '0',
+                    'align': 'left'
+                })
+                
+                # Iterate through list items to create table rows
+                li_items = ol.find_all('li', recursive=False)
+                for index, li in enumerate(li_items, 1):
+                    tr = factory_soup.new_tag('tr')
+                    
+                    # 1. Spacer Cell (Robust Indentation)
+                    td_spacer = factory_soup.new_tag('td', attrs={
+                        'width': '10', # Reduced indent
+                        'valign': 'top',
+                        'style': 'border: none !important;'
+                    })
+                    td_spacer.string = "" # Empty
+                    
+                    # 2. Number Cell (e.g. "[1]")
+                    # Use legacy attributes for xhtml2pdf width control
+                    td_num = factory_soup.new_tag('td', attrs={
+                        'class': 'fn-num',
+                        'width': '1%',
+                        'valign': 'top',
+                        'align': 'right'
+                    })
+                    td_num.string = f"[{index}]"
+                    
+                    # 2. Content Cell
+                    td_content = factory_soup.new_tag('td', attrs={
+                        'class': 'fn-content',
+                        'valign': 'top',
+                        'align': 'left'
+                    })
+                    # Move all children from li to td_content
+                    # We must copy/move properly to preserve structure
+                    td_content.extend(li.contents)
+                    
+                    tr.append(td_spacer)
+                    tr.append(td_num)
+                    tr.append(td_content)
+                    table.append(tr)
+                
+                # Replace the old list with the new table
+                ol.replace_with(table)
+
+        # -------------------------------------------------------------------------
         # Footnote Back-Ref Fix (Replace '↩' with Safe Unicode Arrow)
         # -------------------------------------------------------------------------
         backrefs = soup.find_all('a', class_='footnote-backref')
@@ -1109,21 +1167,51 @@ def export_pdf(content_html: str) -> bytes:
                 div.footnote {
                     font-size: 0.9em;
                     color: #555;
-                    margin-top: 20px;
+                    margin-top: 20px; /* Restore original spacing */
+                    border-top: none; 
+                    padding: 0;
+                    margin-left: 0;
+                }
+                div.footnote hr {
+                    border: 0;
                     border-top: 1px solid #ddd;
-                    padding-top: 10px;
+                    margin: 0 0 10px 0; /* consistent gap below line */
+                    width: 100%;
                 }
-                div.footnote ol {
-                    margin-left: 20px;
-                    padding-left: 15px; /* Increased padding */
-                    list-style-type: decimal;
-                    list-style-position: outside;
-                }
-                div.footnote li {
-                    margin-bottom: 5px;
+                div.footnote table.footnote-table {
+                    width: 100%;
+                    border-collapse: collapse;
+                    margin-top: 0; 
                     margin-left: 0; 
-                    padding-left: 5px;
-                    display: list-item; /* Force list-item behavior */
+                    margin-right: 0;
+                    border: none !important; /* Force override global styles */
+                }
+                div.footnote table.footnote-table td {
+                    border: none !important; /* Force override global styles */
+                    padding: 0;
+                }
+                div.footnote td.fn-num {
+                    /* Width handled by HTML attribute */
+                    white-space: nowrap; 
+                    padding: 0;
+                    padding-right: 10px !important; /* Increased gap per user request */
+                    color: #2563eb;
+                    font-weight: bold;
+                    font-size: 0.8em;
+                    vertical-align: top;
+                }
+                div.footnote td.fn-content {
+                    vertical-align: top;
+                    text-align: left;
+                    padding: 0;
+                    margin: 0;
+                    color: #333;
+                    font-size: 0.9em;
+                }
+                /* Ensure paragraphs inside footnotes don't add massive gaps */
+                div.footnote td.fn-content p {
+                    margin-top: 0;
+                    margin-bottom: 5px;
                 }
         """
 
