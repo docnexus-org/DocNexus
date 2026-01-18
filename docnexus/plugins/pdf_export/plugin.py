@@ -20,6 +20,100 @@ logger = logging.getLogger(__name__)
 # -------------------------------------------------------------------------
 # PDF Transformation Logic
 # -------------------------------------------------------------------------
+
+def parse_tex_to_html(soup_factory, tex_str):
+    """
+    Converts simple TeX (subscripts, superscripts, basic symbols) to an HTML span.
+    Handles: x^2, x_i, x_{i+1}, \alpha -> alpha
+    """
+    container = soup_factory.new_tag('span')
+    # PDF Fonts: DejaVu Sans or standard sans/serif usually works best with xhtml2pdf
+    container['style'] = "font-family: 'Times New Roman', serif;" 
+    
+    cursor = 0
+    n = len(tex_str)
+    
+    while cursor < n:
+        char = tex_str[cursor]
+        
+        if char in ('^', '_'):
+            tag_name = 'sup' if char == '^' else 'sub'
+            cursor += 1
+            content = ""
+            
+            # Check for Group { }
+            if cursor < n and tex_str[cursor] == '{':
+                cursor += 1
+                nesting = 1
+                start_grp = cursor
+                while cursor < n and nesting > 0:
+                    if tex_str[cursor] == '{': nesting += 1
+                    elif tex_str[cursor] == '}': nesting -= 1
+                    if nesting > 0: cursor += 1
+                    
+                content = tex_str[start_grp:cursor]
+                cursor += 1 # Skip closing }
+            elif cursor < n:
+                # Single char argument
+                if tex_str[cursor] == '\\':
+                        # Extract macro
+                        macro_start = cursor
+                        cursor += 1
+                        while cursor < n and tex_str[cursor].isalpha():
+                            cursor += 1
+                        content = tex_str[macro_start:cursor]
+                else:
+                    content = tex_str[cursor]
+                    cursor += 1
+                    
+            elem = soup_factory.new_tag(tag_name)
+            # Recursively parse content
+            if '^' in content or '_' in content:
+                # Recursive call
+                nested_span = parse_tex_to_html(soup_factory, content)
+                for child in list(nested_span.contents):
+                    elem.append(child)
+            else:
+                key = content.replace('\\', '').strip()
+                symbols = {
+                    'alpha': 'α', 'beta': 'β', 'gamma': 'γ', 'theta': 'θ', 'pi': 'π', 
+                    'sigma': 'σ', 'omega': 'ω', 'Delta': 'Δ', 'mu': 'μ', 'lambda': 'λ',
+                    'infty': '∞', 'rightarrow': '→', 'leftarrow': '←', 'approx': '≈',
+                    'neq': '≠', 'le': '≤', 'ge': '≥', 'times': '×', 'cdot': '·'
+                }
+                elem.string = symbols.get(key, content.replace('\\', ''))
+            
+            container.append(elem)
+            
+        elif char == '{' or char == '}':
+                cursor += 1
+        elif char == '\\':
+            macro_start = cursor
+            cursor += 1
+            while cursor < n and tex_str[cursor].isalpha():
+                cursor += 1
+            macro = tex_str[macro_start+1:cursor]
+            
+            symbols = {
+                'alpha': 'α', 'beta': 'β', 'gamma': 'γ', 'theta': 'θ', 'pi': 'π',
+                'sigma': 'σ', 'omega': 'ω', 'Delta': 'Δ', 'mu': 'μ', 'lambda': 'λ',
+                'infty': '∞', 'rightarrow': '→', 'leftarrow': '←', 'approx': '≈',
+                    'neq': '≠', 'le': '≤', 'ge': '≥', 'times': '×', 'cdot': '·', 'frac': ''
+            }
+            
+            if macro == 'frac':
+                    pass
+            else:
+                container.append(soup_factory.new_string(symbols.get(macro, "")))
+        else:
+            text_buffer = ""
+            while cursor < n and tex_str[cursor] not in ('^', '_', '{', '}', '\\'):
+                text_buffer += tex_str[cursor]
+                cursor += 1
+            container.append(soup_factory.new_string(text_buffer))
+            
+    return container
+
 def transform_html_for_pdf(soup: BeautifulSoup):
     """
     Transforms HTML elements into PDF-friendly structures.
@@ -824,13 +918,13 @@ def transform_html_for_pdf(soup: BeautifulSoup):
                         tr.append(td)
                         table.append(tr)
                         target_node.replace_with(table)
+                        processed_ids.add(id(target_node))
                     else:
-                        # Inline Math
-                        img_tag['class'] = "math-inline"
-                        img_tag['style'] = "height: 14px; vertical-align: middle;" 
-                        target_node.replace_with(img_tag)
-                        
-                    processed_ids.add(id(target_node))
+                        # INLINE MATH: Use Native Text + Sub/Sup
+                        replacement = parse_tex_to_html(factory_soup, tex)
+                        replacement['class'] = "math-inline-text"
+                        target_node.replace_with(replacement)
+                        processed_ids.add(id(target_node))
                 else:
                     print(f"DEBUG: Math render failed: {response.status_code}")
                     # Fallback
@@ -888,23 +982,23 @@ def transform_html_for_pdf(soup: BeautifulSoup):
                         div_wrapper.append(img_tag)
                         script.replace_with(div_wrapper)
                     else:
-                        # Inline Math
-                        # Vertical align middle ensures it sits well with text
-                        img_tag['style'] = "vertical-align: middle; max-height: 1.2em;" 
-                        script.replace_with(img_tag)
+                        # INLINE MATH: Text
+                        replacement = parse_tex_to_html(factory_soup, tex)
+                        script.replace_with(replacement)
                 else:
                     print(f"DEBUG: Math render failed: {response.status_code}")
                     # Fallback to text
-                    new_span = factory_soup.new_tag('span')
-                    new_span.string = f"${tex}$"
-                    script.replace_with(new_span)
+                    replacement = parse_tex_to_html(factory_soup, tex)
+                    script.replace_with(replacement)
                     
             except Exception as e:
                 print(f"DEBUG: Math rendering exception: {e}")
                 # Fallback
-                new_span = factory_soup.new_tag('span')
-                new_span.string = f"${tex}$"
-                script.replace_with(new_span)
+                try:
+                    replacement = parse_tex_to_html(factory_soup, tex)
+                    script.replace_with(replacement)
+                except:
+                    pass
             
         # -------------------------------------------------------------------------
         # -------------------------------------------------------------------------
