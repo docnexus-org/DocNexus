@@ -653,6 +653,29 @@ def transform_html_for_pdf(soup: BeautifulSoup):
             table['cellpadding'] = "0"
             
             tr = factory_soup.new_tag("tr")
+            
+            # --- SPECIAL HANDLING FOR LIST ITEMS (LI) ---
+            # xhtml2pdf swallows standard bullets when a block (table) is inside <li>.
+            # We must SIMULATE the bullet using a 2-column table.
+            if block.name == 'li':
+                # Force disable native bullet
+                if 'style' in block.attrs:
+                    block['style'] += "; list-style-type: none;"
+                else:
+                    block['style'] = "list-style-type: none;"
+                    
+                # Col 1: Bullet
+                td_bullet = factory_soup.new_tag("td")
+                td_bullet['valign'] = "top"
+                td_bullet['align'] = "right"
+                td_bullet['width'] = "10" # Tighter width
+                # Standard bullet char.
+                td_bullet.string = "•" 
+                # Adjust padding and size to align better with text baseline
+                td_bullet['style'] = "padding-right: 4px; font-size: 1em; line-height: 1.2; border: none;"
+                tr.append(td_bullet)
+                
+            # Col 2 (or 1): Content
             td = factory_soup.new_tag("td")
             
             # COPY ATTRIBUTES from Block to TD
@@ -887,12 +910,19 @@ def transform_html_for_pdf(soup: BeautifulSoup):
         # -------------------------------------------------------------------------
         # Footnote Transformation: List -> Table (Fixes Numbering Visibility)
         # -------------------------------------------------------------------------
-        # Handle multiple footnote areas if present
-        for footnote_div in soup.find_all('div', class_='footnote'):
+        # -------------------------------------------------------------------------
+        # Footnote Transformation: List -> Table (Fixes Numbering Visibility)
+        # -------------------------------------------------------------------------
+        # Handle multiple footnote areas if present, including standard python-markdown class
+        # We use CSS selectors for broader compatibility
+        # Matches <div class="footnote">, <div class="footnotes">, <section class="...">
+        all_notes = soup.select('div.footnote, div.footnotes, section.footnote, section.footnotes')
+        
+        for footnote_node in all_notes:
             # Find the list (ordered or unordered)
-            ol = footnote_div.find('ol')
+            ol = footnote_node.find('ol')
             if not ol:
-                 ol = footnote_div.find('ul')
+                 ol = footnote_node.find('ul')
             
             if ol:
                 # Create a new table to replace the list
@@ -994,6 +1024,26 @@ def transform_html_for_pdf(soup: BeautifulSoup):
             table['cellpadding'] = "0"
             
             tr = factory_soup.new_tag("tr")
+            
+            # --- SPECIAL HANDLING FOR LIST ITEMS (LI) ---
+            # Simulate bullet if wrapping inside an LI
+            if block.name == 'li':
+                # Force disable native bullet
+                if 'style' in block.attrs:
+                    block['style'] += "; list-style-type: none;"
+                else:
+                    block['style'] = "list-style-type: none;"
+                    
+                # Col 1: Bullet
+                td_bullet = factory_soup.new_tag("td")
+                td_bullet['valign'] = "top"
+                td_bullet['align'] = "right"
+                td_bullet['width'] = "10" # Matches Emoji logic
+                td_bullet.string = "•" 
+                td_bullet['style'] = "padding-right: 4px; font-size: 1em; line-height: 1.2; border: none;"
+                tr.append(td_bullet)
+            
+            # Col 2: Content
             td = factory_soup.new_tag("td")
             
             # COPY ATTRIBUTES
