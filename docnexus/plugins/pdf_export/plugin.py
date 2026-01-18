@@ -168,6 +168,24 @@ def transform_html_for_pdf(soup: BeautifulSoup):
             container.append(content_div)
             details.replace_with(container)
 
+        # 4.1. Enhance Definition Lists (Strong Terms + Indent)
+        # xhtml2pdf may not bold <dt> by default, so we force specific styling/structure.
+        for dt in soup.find_all('dt'):
+            # Force Bold
+            if not dt.find(['strong', 'b']):
+                new_b = factory_soup.new_tag('strong')
+                # Copy contents to new tag
+                new_b.extend(list(dt.contents))
+                dt.clear()
+                dt.append(new_b)
+                
+            # Add inline style for ensured top margin
+            dt['style'] = f"margin-top: 10px; margin-bottom: 2px; color: #222; {dt.get('style', '')}"
+            
+        for dd in soup.find_all('dd'):
+            # Add inline style for indentation
+            dd['style'] = f"margin-left: 20px; margin-bottom: 8px; color: #444; {dd.get('style', '')}"
+
 
         # 4.5. Enhance GitHub Alerts / Admonitions (Flattened for PDF Stability)
         # MOVED BEFORE EMOJI LOGIC so icons get processed if needed (though we wrap them manually).
@@ -1121,9 +1139,13 @@ def export_pdf(content_html: str) -> bytes:
                     page-break-inside: avoid;
                 }
                 
-                /* Removed aggressive h1 page-break-before to prevent blank pages */
                 h1 { border-bottom: 2px solid #333; padding-bottom: 5px; }
                 
+                /* Definition Lists */
+                dl { margin-bottom: 15px; }
+                dt { font-weight: bold; margin-top: 10px; }
+                dd { margin-left: 20px; margin-bottom: 5px; }
+
                 code, pre { font-family: Courier; background: #f5f5f5; border: 1px solid #eee; }
                 table { border-collapse: collapse; width: 100%; margin-top: 10px; }
                 td, th { border: 1px solid #ccc; padding: 6px; text-align: left; }
