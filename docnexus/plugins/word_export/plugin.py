@@ -775,10 +775,19 @@ def export_to_word(html_content: str) -> bytes:
             except Exception as e:
                 # logger.warning(f"Word Export: Skipping image '{src}': {e}")
                 # Fallback to alt text
-                alt_text = img.get('alt', 'Image')
+                # Fallback to alt text
+                alt_text = img.get('alt', '')
                 replacement = soup.new_tag('span')
-                replacement.string = f"[{alt_text}]"
-                replacement['style'] = "color: #666; font-style: italic; border: 1px solid #ccc; padding: 2px;"
+                # Remove brackets. If it's an emoji (detected by regex or length), we might want normal font.
+                # But for safety, keep the fallback text as is, just without brackets.
+                replacement.string = alt_text if alt_text else "Image"
+                
+                # If it looks like an emoji (short length), style it as emoji font
+                if len(alt_text) <= 2:
+                     replacement['style'] = "font-family: 'Segoe UI Emoji', sans-serif;"
+                else:
+                     replacement['style'] = "color: #666; font-style: italic; border: 1px solid #ccc; padding: 2px;"
+                
                 img.replace_with(replacement)
 
         # Sanitize Styles to prevent htmldocx crashes (invalid literal for int() with base 16)
