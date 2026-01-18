@@ -58,3 +58,7 @@ Missing Markdown Features (Audit & Roadmap):
 -> Embded PDF/Video: Syntax to embed non-image media directly.
 -> Base64 Embedding: `pymdownx.b64` to inline assets for single-file portability.
 -> Remote Includes: `pymdownx.snippets` shows in code, but needs config to allow including URLs or relative paths effectively.
+
+Bugs (To Fix in Next Release):
+-> Bullet points vanish when containing Inline Emojis or Math Formulas (due to table wrapping logic).
+-> Emoji size in Block sections is appearing too large.
