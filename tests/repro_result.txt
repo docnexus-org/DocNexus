@@ -1,0 +1,33 @@
+INFO:ReproMath:--- Testing Case 1: MathJax Script ---
+INFO:ReproMath:Found 2 initial math candidates.
+INFO:ReproMath:Found 2 initial math candidates.
+INFO:ReproMath:Analyzing Candidate 0: Tag=script, Classes=None
+INFO:ReproMath:Escalated target to parent (Script -> Wrapper): div ['arithmatex']
+INFO:ReproMath:Extracted TeX from Script.
+INFO:ReproMath:Generated TeX: E = mc^2
+INFO:ReproMath:Result HTML: <div>
+ <img alt="E = mc^2" src="https://latex.codecogs.com/png.image?%5Cdpi%7B300%7D%20E%20%3D%20mc%5E2"/>
+</div>
+
+INFO:ReproMath:--- Testing Case 2: KaTeX Structure ---
+INFO:ReproMath:Found 2 initial math candidates.
+INFO:ReproMath:Found 2 initial math candidates.
+INFO:ReproMath:Analyzing Candidate 0: Tag=div, Classes=['arithmatex']
+WARNING:ReproMath:Failed to extract TeX from candidate div. Decomposing.
+ERROR:ReproMath:Error logging candidate 1: 'NoneType' object has no attribute 'get'
+INFO:ReproMath:Result HTML: 
+INFO:ReproMath:--- Testing Case 3: Mixed Garbage ---
+INFO:ReproMath:Found 2 initial math candidates.
+INFO:ReproMath:Found 2 initial math candidates.
+INFO:ReproMath:Analyzing Candidate 0: Tag=script, Classes=None
+INFO:ReproMath:Escalated target to parent (Script -> Wrapper): div ['arithmatex']
+INFO:ReproMath:Extracted TeX from Script.
+INFO:ReproMath:Generated TeX: E=mc^2
+INFO:ReproMath:Result HTML: <img alt="E=mc^2" src="https://latex.codecogs.com/png.image?%5Cdpi%7B300%7D%20E%3Dmc%5E2"/>
+
+INFO:ReproMath:--- Testing Case 4: Broken/Missing TeX ---
+INFO:ReproMath:Found 1 initial math candidates.
+INFO:ReproMath:Found 1 initial math candidates.
+INFO:ReproMath:Analyzing Candidate 0: Tag=div, Classes=['arithmatex']
+WARNING:ReproMath:Failed to extract TeX from candidate div. Decomposing.
+INFO:ReproMath:Result HTML: 

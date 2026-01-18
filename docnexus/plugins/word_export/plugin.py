@@ -2,6 +2,8 @@ import logging
 import io
 import shutil
 from pathlib import Path
+import re
+import urllib.parse
 
 # Note: Feature, FeatureType, FeatureState, PluginRegistry are INJECTED by the loader.
 # Do not import them directly to avoid split-brain issues.
@@ -42,7 +44,7 @@ try:
     from docx.oxml import OxmlElement
     from docx.oxml.ns import qn
     from docx.enum.text import WD_ALIGN_PARAGRAPH, WD_COLOR
-    import re
+    # re is imported globally
 except ImportError as e:
     # Defer error handling to export_to_word if these are not available
     # This allows the module to load even if docx dependencies are missing
@@ -239,7 +241,8 @@ def transform_html_for_word(soup: BeautifulSoup):
             title_span = soup.new_tag('span')
             
             title_text = title.get_text(strip=True) or alert_type
-            title_span.string = f"{icon} {title_text}"
+            # User reported extra spaces. Removing explicit space.
+            title_span.string = f"{icon}\u00A0{title_text}" # Using non-breaking space for consistent small gap
             
             # Force Emoji Font for color rendering (applied to span, as b tag styles might be ignored)
             # Simplify font string to avoid parsing issues with quotes/commas
@@ -387,64 +390,9 @@ def transform_html_for_word(soup: BeautifulSoup):
             
         dl.unwrap()
 
-    # 7. Transform Math (.katex / .arithmatex) -> Code Block
-    # 7a. Block Math
-    # Arithmatex generic output uses class="arithmatex" and \[ ... \]
-    for display_math in soup.find_all(class_='arithmatex'):
-        # Check if it's block math (usually has \[ ... \])
-            # Clean TeX: Robust extraction
-            # 1. Check for script tag (MathJax non-generic)
-            script_tex = display_math.find('script', type='math/tex')
-            if script_tex:
-                clean_tex = script_tex.get_text(strip=True)
-            else:
-                # 2. Generic Mode: Remove accessible/preview garbage
-                # Remove MathJax_Preview if present
-                for preview in display_math.find_all(class_='MathJax_Preview'):
-                    preview.decompose()
-                
-                text = display_math.get_text(strip=True)
-                # Try Regex for delimiters
-                import re
-                match = re.search(r'\\\[(.*?)\\\]', text, re.DOTALL)
-                if match:
-                    clean_tex = match.group(1).strip()
-                else:
-                    # Fallback: remove delimiters manually if regex fails but structure implies standard generic
-                    clean_tex = text.replace(r'\[', '').replace(r'\]', '').strip()
-            
-            # Create Block
-            code_p = soup.new_tag('p')
-            code_p['style'] = "background-color: #f0f0f0; padding: 8px; border: 1px solid #ccc; margin: 10px 0;"
-            
-            # Word needs the FONT style on the run (span), not the paragraph (p)
-            code_span = soup.new_tag('span')
-            code_span['style'] = "font-family: 'Courier New', monospace;"
-            code_span.string = clean_tex
-            
-            code_p.append(code_span)
-            display_math.replace_with(code_p)
+    # 7. Transform Math currently handled by Image Generation Logic later
+    # We purposefully skip it here to preserve the nodes for the Image Converter.
 
-    # 7b. Inline Math (.katex) -> Inline Code Span
-    for katex_span in soup.find_all(class_='katex'):
-        # Skip if we just processed it inside a display block (orphaned check)
-        if katex_span.find_parent(class_='katex-display'):
-             continue
-             
-        # Try to find annotation or script
-        annotation = katex_span.find('annotation', {'encoding': 'application/x-tex'})
-        if annotation:
-            tex_source = annotation.get_text(strip=True)
-        else:
-            # Fallback for inline
-            tex_source = katex_span.get_text(strip=True)
-        
-        # Create Inline Span
-        code_span = soup.new_tag('span')
-        code_span['style'] = "font-family: monospace; background-color: #f0f0f0;"
-        code_span.string = f" {tex_source} "
-        
-        katex_span.replace_with(code_span)
 
 
 
@@ -470,9 +418,18 @@ def export_to_word(html_content: str) -> bytes:
         soup = BeautifulSoup(html_content, 'html.parser')
     
     # Cleaning (Scripts, Styles, Nav)
+    # Cleaning (Scripts, Styles, Nav)
+    # CRITICAL: Do NOT delete math scripts yet, we need them for extraction!
     for tag in soup.find_all(['script', 'style', 'nav']):
+        if tag.name == 'script' and tag.get('type') and 'math/tex' in tag.get('type'):
+            continue
         tag.decompose()
         
+    # LOGGING: Inspect HTML Structure entering Word Transform (CRITICAL DEBUG)
+    logger.info(f"WordExport: HTML Head Snippet: {soup.prettify()[:2000]}")
+    
+    # No more debug search
+            
     # Transform Complex HTML for Word Compatibility
     # (Tabs, Alerts, Details, Math, etc.)
     transform_html_for_word(soup)
@@ -578,6 +535,162 @@ def export_to_word(html_content: str) -> bytes:
     
     # Create a temporary directory for this export session
     with tempfile.TemporaryDirectory() as temp_img_dir:
+        # 4. Transform Math (KaTeX/MathJax) -> Image (CodeCogs)
+        # Target: .katex-mathml annotation[encoding="application/x-tex"] or <script type="math/tex">
+        
+        # Imports needed locally for this logic if not present
+        # (re and urllib.parse are now imported globally)
+        
+        # --- PRE-CLEANUP: Remove MathJax Previews ---
+        # These often sit adjacent to the script tag and just clutter the DOM.
+        for junk in soup.find_all(class_=['MathJax_Preview', 'katex-html']):
+            # Verify valid parent to avoid double-deletion errors
+            if junk.parent:
+                junk.decompose()
+                
+        # Collect candidates
+        # --- PASS 1: Specific Math Elements (Scripts & KaTeX spans) ---
+        # We target the leaf nodes first to ensure granularity (e.g. multiple formulas in one line/container)
+        
+        specific_candidates = []
+        specific_candidates.extend(soup.find_all('script', type=re.compile(r'math/tex')))
+        # Target .katex but ignore those inside other .katex (nested)
+        for k in soup.find_all(class_='katex'):
+             if not k.find_parent(class_='katex'):
+                 specific_candidates.append(k)
+        
+        processed_math_ids = set()
+        
+        logger.info(f"WordExport: Found {len(specific_candidates)} specific math candidates (Scripts/KaTeX).")
+        
+        for i, target_node in enumerate(specific_candidates):
+            if id(target_node) in processed_math_ids:
+                continue
+            
+            # Extract TeX
+            tex = ""
+            is_display = False
+            
+            script_child = target_node if target_node.name == 'script' else target_node.find('script', type=re.compile(r'math/tex'))
+            annotation_child = target_node.find('annotation', attrs={'encoding': 'application/x-tex'})
+            if not annotation_child:
+                annotation_child = target_node.find('annotation')
+                
+            if script_child:
+                tex = script_child.get_text()
+                is_display = 'mode=display' in script_child.get('type', '')
+            elif annotation_child:
+                tex = annotation_child.get_text().strip()
+                is_display = (target_node.name == 'div') or \
+                             ('display' in (target_node.get('class') or [])) or \
+                             ('katex-display' in target_node.decode_contents()) or \
+                             (target_node.find_parent(class_='katex-display') is not None)
+            
+            if tex and tex.strip():
+                # Generate Image
+                tex = tex.strip()
+                processed_math_ids.add(id(target_node))
+                
+                # Construct CodeCogs URL
+                base_url = "https://latex.codecogs.com/png.image"
+                params = f"\\dpi{{300}} {tex}"
+                safe_params = urllib.parse.quote(params)
+                img_url = f"{base_url}?{safe_params}"
+                
+                img_tag = soup.new_tag('img')
+                img_tag['src'] = img_url
+                img_tag['alt'] = tex
+                img_tag['class'] = 'docnexus-math-img' # Marker for later
+                
+                if is_display:
+                    div_wrapper = soup.new_tag('div')
+                    div_wrapper['style'] = "text-align: center; margin: 12px 0;"
+                    img_tag['style'] = "max-width: 100%;"
+                    div_wrapper.append(img_tag)
+                    replacement = div_wrapper
+                else:
+                    img_tag['style'] = "vertical-align: middle;"
+                    replacement = img_tag
+                
+                target_node.replace_with(replacement)
+            else:
+                # If we targeted a specific node but found no TeX, decompose to be safe
+                 if target_node.name == 'script' or 'katex' in (target_node.get('class') or []):
+                    target_node.decompose()
+
+        # --- PASS 2: Generic Containers (.arithmatex) ---
+        # Only process these if they contain raw text fallback, NOT if they contain our images from Pass 1.
+        
+        generic_candidates = soup.find_all(class_='arithmatex')
+        logger.info(f"WordExport: Analyzing {len(generic_candidates)} generic .arithmatex containers.")
+        
+        for node in generic_candidates:
+            # 1. Cleanup: If it contains our processed images, just Unwrap the container so images sit inline.
+            if node.find('img', class_='docnexus-math-img'):
+                node.unwrap()
+                continue
+                
+            # 2. Cleanup: If it contains residual scripts/katex that failed Pass 1, ignore (they should be gone).
+            
+            # 3. Text Extraction (Fallback for Generic Markdown)
+            # Example: <div class="arithmatex">\[ ... \]</div>
+            raw_text = node.get_text().strip()
+            tex = ""
+            is_display = False
+            
+            if raw_text.startswith('\\[') and raw_text.endswith('\\]'):
+                tex = raw_text[2:-2].strip()
+                is_display = True
+            elif raw_text.startswith('$$') and raw_text.endswith('$$'):
+                    tex = raw_text[2:-2].strip()
+                    is_display = True
+            elif raw_text.startswith('\\(') and raw_text.endswith('\\)'):
+                tex = raw_text[2:-2].strip()
+                is_display = False
+            elif raw_text.startswith('$') and raw_text.endswith('$'):
+                    tex = raw_text[1:-1].strip()
+                    is_display = False
+            
+            if tex and tex.strip():
+                 logger.info(f"WordExport: Extracted TeX from Generic Arithmatex: {tex[:20]}...")
+                 # Generate Image (Reuse logic? A bit repetitive but safe)
+                 base_url = "https://latex.codecogs.com/png.image"
+                 params = f"\\dpi{{300}} {tex}"
+                 safe_params = urllib.parse.quote(params)
+                 img_url = f"{base_url}?{safe_params}"
+                 
+                 img_tag = soup.new_tag('img')
+                 img_tag['src'] = img_url
+                 img_tag['alt'] = tex
+                 
+                 if is_display or node.name == 'div':
+                    div_wrapper = soup.new_tag('div')
+                    div_wrapper['style'] = "text-align: center; margin: 12px 0;"
+                    img_tag['style'] = "max-width: 100%;"
+                    div_wrapper.append(img_tag)
+                    replacement = div_wrapper
+                 else:
+                    img_tag['style'] = "vertical-align: middle;"
+                    replacement = img_tag
+                 
+                 node.replace_with(replacement)
+            else:
+                 # It's an empty or garbage arithmatex container? 
+                 # If it doesn't contain an image or valid tex, it's just wrapper garbage.
+                 if not node.find('img'): # Double check
+                     node.unwrap() # Just remove the wrapper, keep content (text might be meaningful?) or decompose?
+                     # Safest is unwrap.
+            
+        # Final Cleanup Pass
+        # We explicitly remove 'katex-mathml' here because we don't want htmldocx to render 
+        # the hidden accessible MathML text (which causes the 'n!k!...' garbage).
+        # We also treat the entire .arithmatex container as potential garbage if it wasn't replaced properly.
+        count_cleaned = 0
+        for junk in soup.find_all(class_=['MathJax_Preview', 'katex-html', 'katex-mathml']):
+            if junk.parent:
+                junk.decompose()
+                count_cleaned += 1
+        logger.info(f"WordExport: Final cleanup removed {count_cleaned} remaining garbage nodes.")
         temp_dir_path = Path(temp_img_dir)
         
         for img in soup.find_all('img'):
@@ -604,7 +717,14 @@ def export_to_word(html_content: str) -> bytes:
                              raise ValueError("SVG format is not supported by Word.")
 
                         # Determine filename
-                        filename = path_obj.name or "image.png"
+                        # CRITICAL FIX: CodeCogs URLs have identical paths (/png.image) but different queries.
+                        # We MUST hash the full URL to ensure unique filenames for different formulas.
+                        import hashlib
+                        url_hash = hashlib.md5(src.encode('utf-8')).hexdigest()[:10]
+                        original_name = path_obj.name or "image"
+                        # Append hash to filename to guarantee uniqueness
+                        filename = f"{path_obj.stem}_{url_hash}{path_obj.suffix or '.png'}"
+                        if filename.startswith('.'): filename = f"img_{url_hash}{filename}"
                         local_path = temp_dir_path / filename
                         
                         with open(local_path, 'wb') as f:
@@ -735,7 +855,7 @@ def export_to_word(html_content: str) -> bytes:
                         # HEX Validation: If it looks like a hex color, it MUST be valid
                         # htmldocx crashes on '#' or invalid hex with int('', 16)
                         if '#' in val:
-                            import re
+                            # re is imported globally
                             # Check if the value is purely a hex code (allow for !important suffix which we don't prefer but might exist)
                             # We strip !important for the check
                             clean_val = val.replace('!important', '').strip()
