@@ -532,6 +532,119 @@ def export_to_word(html_content: str) -> bytes:
     import urllib.request
     from urllib.parse import urlparse
     import shutil
+    import re # Ensure re is available
+    
+    def parse_tex_to_html(soup_factory, tex_str):
+        """
+        Converts simple TeX (subscripts, superscripts, basic symbols) to an HTML span.
+        Handles: x^2, x_i, x_{i+1}, \alpha -> alpha
+        """
+        container = soup_factory.new_tag('span')
+        container['style'] = "font-family: 'Cambria Math', 'Times New Roman', serif;"
+        
+        # 1. Simple Tokenizer: Split by _ and ^, keeping delimiters
+        # This is non-trivial regex. Let's do a simple recursive state machine or iterative parser.
+        # Actually, let's process simpler logic: 
+        # Identify chunks of text, ^{...} or ^char, _{...} or _char
+        
+        cursor = 0
+        n = len(tex_str)
+        
+        while cursor < n:
+            char = tex_str[cursor]
+            
+            if char in ('^', '_'):
+                tag_name = 'sup' if char == '^' else 'sub'
+                cursor += 1
+                content = ""
+                
+                # Check for Group { }
+                if cursor < n and tex_str[cursor] == '{':
+                    cursor += 1
+                    nesting = 1
+                    start_grp = cursor
+                    while cursor < n and nesting > 0:
+                        if tex_str[cursor] == '{': nesting += 1
+                        elif tex_str[cursor] == '}': nesting -= 1
+                        if nesting > 0: cursor += 1
+                        
+                    content = tex_str[start_grp:cursor]
+                    cursor += 1 # Skip closing }
+                elif cursor < n:
+                    # Single char argument
+                    # Warning: Macros like \alpha count as one char? 
+                    # For simplicity, extract just the next non-space char or macro
+                    if tex_str[cursor] == '\\':
+                         # Extract macro
+                         macro_start = cursor
+                         cursor += 1
+                         while cursor < n and tex_str[cursor].isalpha():
+                             cursor += 1
+                         content = tex_str[macro_start:cursor]
+                    else:
+                        content = tex_str[cursor]
+                        cursor += 1
+                        
+                # Create Tag
+                elem = soup_factory.new_tag(tag_name)
+                # Recursively parse content? Or just strip braces?
+                # Simple recursion for nested superscripts
+                if '^' in content or '_' in content:
+                    nested_span = parse_tex_to_html(soup_factory, content)
+                    # Unwrap span into elem
+                    for child in list(nested_span.contents):
+                        elem.append(child)
+                else:
+                    # Cleanup content (remove backslashes for simple display?)
+                    # Replace common greek? \alpha -> α
+                    # Keeping it simple: remove backslash if it looks like a macro
+                    key = content.replace('\\', '').strip()
+                    # Basic Mapper (could be expanded)
+                    symbols = {
+                        'alpha': 'α', 'beta': 'β', 'gamma': 'γ', 'theta': 'θ', 'pi': 'π', 
+                        'sigma': 'σ', 'omega': 'ω', 'Delta': 'Δ', 'mu': 'μ', 'lambda': 'λ',
+                        'infty': '∞', 'rightarrow': '→', 'leftarrow': '←', 'approx': '≈',
+                        'neq': '≠', 'le': '≤', 'ge': '≥', 'times': '×', 'cdot': '·'
+                    }
+                    elem.string = symbols.get(key, content.replace('\\', ''))
+                
+                container.append(elem)
+                
+            elif char == '{' or char == '}':
+                 # Just skip outer grouping braces in main flow if they appear (unlikely unless malformed)
+                 # But we might want to keep them if they are semantic sets?
+                 # Assume they are structural.
+                 cursor += 1
+            elif char == '\\':
+                # Handle text macros in main flow
+                macro_start = cursor
+                cursor += 1
+                while cursor < n and tex_str[cursor].isalpha():
+                    cursor += 1
+                macro = tex_str[macro_start+1:cursor]
+                
+                symbols = {
+                    'alpha': 'α', 'beta': 'β', 'gamma': 'γ', 'theta': 'θ', 'pi': 'π',
+                    'sigma': 'σ', 'omega': 'ω', 'Delta': 'Δ', 'mu': 'μ', 'lambda': 'λ',
+                    'infty': '∞', 'rightarrow': '→', 'leftarrow': '←', 'approx': '≈',
+                     'neq': '≠', 'le': '≤', 'ge': '≥', 'times': '×', 'cdot': '·', 'frac': ''
+                }
+                
+                if macro == 'frac':
+                     # simple frac ignore?
+                     pass
+                else:
+                    container.append(soup_factory.new_string(symbols.get(macro, ""))) # Only append if mapped, otherwise skip backslash
+            else:
+                # Regular text
+                # Gather contiguous text
+                text_buffer = ""
+                while cursor < n and tex_str[cursor] not in ('^', '_', '{', '}', '\\'):
+                    text_buffer += tex_str[cursor]
+                    cursor += 1
+                container.append(soup_factory.new_string(text_buffer))
+                
+        return container
     
     # Create a temporary directory for this export session
     with tempfile.TemporaryDirectory() as temp_img_dir:
@@ -587,30 +700,32 @@ def export_to_word(html_content: str) -> bytes:
                              (target_node.find_parent(class_='katex-display') is not None)
             
             if tex and tex.strip():
-                # Generate Image
                 tex = tex.strip()
                 processed_math_ids.add(id(target_node))
                 
-                # Construct CodeCogs URL
-                base_url = "https://latex.codecogs.com/png.image"
-                params = f"\\dpi{{300}} {tex}"
-                safe_params = urllib.parse.quote(params)
-                img_url = f"{base_url}?{safe_params}"
-                
-                img_tag = soup.new_tag('img')
-                img_tag['src'] = img_url
-                img_tag['alt'] = tex
-                img_tag['class'] = 'docnexus-math-img' # Marker for later
-                
                 if is_display:
+                    # BLOCK MATH: Use Image (CodeCogs) for full fidelity
+                    base_url = "https://latex.codecogs.com/png.image"
+                    params = f"\\dpi{{300}} {tex}"
+                    safe_params = urllib.parse.quote(params)
+                    img_url = f"{base_url}?{safe_params}"
+                    
+                    img_tag = soup.new_tag('img')
+                    img_tag['src'] = img_url
+                    img_tag['alt'] = tex
+                    img_tag['class'] = 'docnexus-math-img' 
+                    
                     div_wrapper = soup.new_tag('div')
                     div_wrapper['style'] = "text-align: center; margin: 12px 0;"
                     img_tag['style'] = "max-width: 100%;"
                     div_wrapper.append(img_tag)
                     replacement = div_wrapper
                 else:
-                    img_tag['style'] = "vertical-align: middle;"
-                    replacement = img_tag
+                    # INLINE MATH: Use Native Text + Sub/Sup for seamless flow
+                    # Call our helper
+                    replacement = parse_tex_to_html(soup, tex)
+                    # Add a class for potential styling?
+                    replacement['class'] = 'math-inline-text'
                 
                 target_node.replace_with(replacement)
             else:
@@ -619,14 +734,14 @@ def export_to_word(html_content: str) -> bytes:
                     target_node.decompose()
 
         # --- PASS 2: Generic Containers (.arithmatex) ---
-        # Only process these if they contain raw text fallback, NOT if they contain our images from Pass 1.
+        # Only process these if they contain raw text fallback, NOT if they contain our images/text from Pass 1.
         
         generic_candidates = soup.find_all(class_='arithmatex')
         logger.info(f"WordExport: Analyzing {len(generic_candidates)} generic .arithmatex containers.")
         
         for node in generic_candidates:
-            # 1. Cleanup: If it contains our processed images, just Unwrap the container so images sit inline.
-            if node.find('img', class_='docnexus-math-img'):
+            # 1. Cleanup: If it contains our processed items (img or math-inline-text), Unwrap wrapper.
+            if node.find('img', class_='docnexus-math-img') or node.find(class_='math-inline-text'):
                 node.unwrap()
                 continue
                 
@@ -653,32 +768,34 @@ def export_to_word(html_content: str) -> bytes:
             
             if tex and tex.strip():
                  logger.info(f"WordExport: Extracted TeX from Generic Arithmatex: {tex[:20]}...")
-                 # Generate Image (Reuse logic? A bit repetitive but safe)
-                 base_url = "https://latex.codecogs.com/png.image"
-                 params = f"\\dpi{{300}} {tex}"
-                 safe_params = urllib.parse.quote(params)
-                 img_url = f"{base_url}?{safe_params}"
                  
-                 img_tag = soup.new_tag('img')
-                 img_tag['src'] = img_url
-                 img_tag['alt'] = tex
-                 
-                 if is_display or node.name == 'div':
-                    div_wrapper = soup.new_tag('div')
-                    div_wrapper['style'] = "text-align: center; margin: 12px 0;"
-                    img_tag['style'] = "max-width: 100%;"
-                    div_wrapper.append(img_tag)
-                    replacement = div_wrapper
+                 if is_display:
+                     base_url = "https://latex.codecogs.com/png.image"
+                     params = f"\\dpi{{300}} {tex}"
+                     safe_params = urllib.parse.quote(params)
+                     img_url = f"{base_url}?{safe_params}"
+                     
+                     img_tag = soup.new_tag('img')
+                     img_tag['src'] = img_url
+                     img_tag['alt'] = tex
+                     img_tag['class'] = 'docnexus-math-img'
+                     
+                     div_wrapper = soup.new_tag('div')
+                     div_wrapper['style'] = "text-align: center; margin: 12px 0;"
+                     img_tag['style'] = "max-width: 100%;"
+                     div_wrapper.append(img_tag)
+                     replacement = div_wrapper
                  else:
-                    img_tag['style'] = "vertical-align: middle;"
-                    replacement = img_tag
+                    # Inline Text Fallback
+                    replacement = parse_tex_to_html(soup, tex)
+                    replacement['class'] = 'math-inline-text'
                  
                  node.replace_with(replacement)
             else:
                  # It's an empty or garbage arithmatex container? 
                  # If it doesn't contain an image or valid tex, it's just wrapper garbage.
                  if not node.find('img'): # Double check
-                     node.unwrap() # Just remove the wrapper, keep content (text might be meaningful?) or decompose?
+                     node.unwrap() # Just remove the wrapper, keep content
                      # Safest is unwrap.
             
         # Final Cleanup Pass
@@ -762,11 +879,30 @@ def export_to_word(html_content: str) -> bytes:
                                            im = im.convert('RGBA')
                                        bg.paste(im, mask=im.split()[3]) # 3 is the alpha channel
                                        
-                                       # Save flattened image
+                                        # Save flattened image
                                        output = io.BytesIO()
                                        bg.save(output, format='PNG')
                                        img_data = output.getvalue()
                                        ext = '.png'
+                                       
+                                       # MATH SCALING FIX:
+                                       # CodeCogs 300 DPI images are huge. We need to scale them down to match text size.
+                                       # 12pt text is ~16px. 300 DPI "x" might be 50px.
+                                       # Scale factor: 96 / 300 = 0.32. Let's try 0.3 to be safe.
+                                       if 'docnexus-math-img' in (img.get('class') or []):
+                                            current_w, current_h = im.size
+                                            scale_factor = 0.3
+                                            new_w = int(current_w * scale_factor)
+                                            new_h = int(current_h * scale_factor)
+                                            # Set attributes for htmldocx
+                                            img['width'] = new_w
+                                            img['height'] = new_h
+                                            # Update style to enforce it as well
+                                            base_style = "vertical-align: middle;"
+                                            if img.has_attr('style'):
+                                                 base_style = img['style'] + ";"
+                                            img['style'] = f"{base_style} width: {new_w}px; height: {new_h}px;"
+                                            
                                    else:
                                         ext = '.png' if 'png' in ctype else '.jpg'
                             except Exception as iconv_err:
@@ -781,6 +917,9 @@ def export_to_word(html_content: str) -> bytes:
                         with open(local_path, 'wb') as f:
                             f.write(img_data)
                             
+                        # Update src used for Docx
+                        # Windows path separator fix? No, local_path is Path object.
+                        # htmldocx needs a string path.
                         new_src = str(local_path)
                     else:
                         raise ValueError("Unsupported Data URI format")
