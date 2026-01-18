@@ -162,6 +162,45 @@ def transform_html_for_pdf(soup: BeautifulSoup):
                      # Subsequent use: Just styling (handled by CSS)
                      pass
 
+        # 3.6 Task List / Checklist Handling
+        # Convert <input type="checkbox"> into visual icons (☑ / ☐) via our Emoji renderer for consistency.
+        # This replaces the native input which xhtml2pdf renders poorly or not at all (static).
+        task_items = soup.find_all('li', class_='task-list-item')
+        if task_items:
+            print(f"DEBUG: Found {len(task_items)} task list items to transform.")
+            
+        for li in task_items:
+            # Find the input
+            checkbox = li.find('input', type='checkbox')
+            if not checkbox:
+                continue
+                
+            is_checked = checkbox.has_attr('checked')
+            
+            # Use standard unicode chars for checkbox state, but Render them as Emojis/Images for quality
+            # checked: 2611 (☑), unchecked: 2610 (☐)
+            # Or use emoji style: ✅ (2705) vs ⬜ (2B1C)
+            # Let's stick to the Classic Ballot Box which looks like a form control.
+            char = '\u2611' if is_checked else '\u2610'
+            
+            # Use our existing base64 generation if available (requires moving that function UP or importing)
+            # The function `get_emoji_base64` is defined inside `transform_html_for_pdf` but further down.
+            # We need to move `get_emoji_base64` definition to the TOP of `transform_html_for_pdf` or outer scope.
+            # For now, to avoid massive refactor, I will instantiate strict Base64 icons here directly 
+            # OR I will rely on Text with a nice font if simpler, BUT User wants "Top Rated" look.
+            # actually, `xhtml2pdf` likely handles the font `Segoe UI Emoji` if installed? No, it needs ttf load.
+            # I will USE THE SAME LOGIC as Alerts - hardcoded Base64 for stability and strict visuals.
+            
+            # Icons from: https://icon-sets.iconify.design/ (Simple vector-like PNGs)
+            # Unchecked (Gray Box)
+            icon_unchecked = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAADAAAAAwCAYAAABXAvmHAAAABmJLR0QA/wD/AP+gvaeTAAAAUElEQVRoge3QwQnAIBQFQYO0/y5sQTAW82GhA1n4wcx8n/O+985yX2b23vN/5z3X+Z333Od/3vN6/vOe9/Of93yfv7zneb/znef9zvN+5/n/fQCjFw/i4V8FmAAAAABJRU5ErkJggg==" # Just a box border? No, this is empty.
+            # Let's use simple data URIs for 16x16 bitmaps.
+            
+            # Better: Move basic emoji logic to top or just defer this loop?
+            # I'll defer this loop to AFTER `get_emoji_base64` is defined (Section 5).
+            # I will insert a "TODO helper" style comment here and actually place the code further down.
+            pass 
+
         # 4. Transform Collapsible Details -> DIV with Bold Header
         for details in soup.find_all('details'):
             if not isinstance(details, Tag): continue
@@ -412,6 +451,54 @@ def transform_html_for_pdf(soup: BeautifulSoup):
                 import traceback
                 traceback.print_exc()
                 return None
+
+                return None
+
+        # -------------------------------------------------------------------------
+        # 5.5 Checklist / Task List Handling
+        # -------------------------------------------------------------------------
+        # Moved here to utilize 'get_emoji_base64' for consistent high-quality icons.
+        
+        task_items = soup.find_all('li', class_='task-list-item')
+        if task_items:
+            print(f"DEBUG: Found {len(task_items)} task list items to transform.")
+            
+        for li in task_items:
+            checkbox = li.find('input', type='checkbox')
+            if not checkbox: continue
+            
+            is_checked = checkbox.has_attr('checked')
+            
+            # visual chars: ☑ (2611) / ☐ (2610)
+            # We treat them as emojis to generate the image
+            char = '\u2611' if is_checked else '\u2610'
+            b64_icon = get_emoji_base64(char)
+            
+            if b64_icon:
+                img_tag = factory_soup.new_tag('img')
+                img_tag['src'] = b64_icon
+                img_tag['alt'] = "[x]" if is_checked else "[ ]"
+                # Style for alignment
+                img_tag['style'] = "width: 14px; height: 14px; vertical-align: middle; margin-right: 6px;"
+                
+                # Replace input with image
+                checkbox.replace_with(img_tag)
+                
+                # Remove 'task-list-item' class or style it to remove default bullet?
+                # Usually standard CSS handles 'list-style: none' for task-list-item.
+                # We enforce it to be sure.
+                if 'style' in li.attrs:
+                    li['style'] += "; list-style-type: none;"
+                else:
+                    li['style'] = "list-style-type: none;"
+            else:
+                 # Fallback if image gen fails
+                 new_span = factory_soup.new_tag('span')
+                 new_span.string = "[x] " if is_checked else "[ ] "
+                 new_span['style'] = "font-family: monospace; font-weight: bold; margin-right: 5px;"
+                 checkbox.replace_with(new_span)
+                 li['style'] = "list-style-type: none;"
+
 
         # Regex for common emoji ranges
         emoji_pattern = re.compile(
