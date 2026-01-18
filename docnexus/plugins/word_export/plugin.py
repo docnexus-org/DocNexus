@@ -146,101 +146,14 @@ def transform_html_for_word(soup: BeautifulSoup):
     """
     # 1. Transform Tabs (.tabbed-set) -> Vertical Headings + Content
     # Structure: .tabbed-set > input, label, .tabbed-content
+    # 1. Transform Tabs (.tabbed-set) -> Vertical Headings + Content
+    # Structure: .tabbed-set > input, label, .tabbed-content
     for tab_set in soup.find_all(class_='tabbed-set'):
         # Create a container for the flattened content
         flattened_div = soup.new_tag('div')
         
         # Iterate over labels and corresponding content
         labels = tab_set.find_all('label')
-        # ... logic for tabs ...
-        # (Assuming existing logic is fine, just referencing start)
-
-    # 2. Transform Collapsible Details -> DIV with Bold Header
-    for details in soup.find_all('details'):
-        summary = details.find('summary')
-        summary_text = summary.get_text().strip() if summary else "Details"
-        
-        container = soup.new_tag('div')
-        container['style'] = "border: 1px solid #ccc; padding: 10px; margin: 10px 0; background-color: #f9f9f9;"
-        
-        header = soup.new_tag('p')
-        header_b = soup.new_tag('strong')
-        # Use a simpler arrow character for Word compatibility
-        header_b.string = f"► {summary_text}"
-        header.append(header_b)
-        
-        container.append(header)
-        
-        # Move content
-        for child in list(details.contents):
-            if child.name != 'summary':
-                container.append(child)
-                
-        details.replace_with(container)
-
-    # 3. Transform Emojis -> Colored Span (VS16)
-    # Iterate text nodes to find emojis? No, standard emoji rendering usually relies on font.
-    # If the user has raw emoji characters, we wrap them.
-    # ... existing emoji logic ...
-
-    # 4. Transform Math (KaTeX/MathJax) -> Clean TeX
-    # Target: .katex-mathml annotation[encoding="application/x-tex"]
-    # This is the Gold Standard for KaTeX fidelity.
-    
-    # First, handle KaTeX specific structure
-    for katex_node in soup.find_all(class_='katex'):
-        try:
-            # Find the semantic annotation
-            annotation = katex_node.find('annotation', attrs={'encoding': 'application/x-tex'})
-            if annotation:
-                tex_code = annotation.get_text().strip()
-                
-                # Check if it's display mode (block)
-                # KaTeX usually has class 'katex-display' on a parent or 'display' attribute
-                is_block = False
-                parent = katex_node.parent
-                if parent and 'katex-display' in (parent.get('class') or []):
-                    is_block = True
-                
-                # Create replacement
-                # We wrap in a code style so it stands out but is readable
-                new_node = soup.new_tag('span')
-                if is_block:
-                    new_node.string = f"\n$$ {tex_code} $$\n"
-                    new_node['style'] = "display: block; margin: 10px 0; font-family: 'Courier New', monospace; color: #333;"
-                else:
-                    new_node.string = f" ${tex_code}$ "
-                    new_node['style'] = "font-family: 'Courier New', monospace; color: #333;"
-                
-                # If wrapped in .arithmatex, replace THAT container
-                root_node = katex_node
-                if parent and 'arithmatex' in (parent.get('class') or []):
-                    root_node = parent
-                elif parent and parent.name == 'span' and 'katex-display' in (parent.get('class') or []):
-                     # Handle <span class="katex-display"><span class="katex">...</span></span>
-                     # Check if *that* is in arithmatex
-                     grandparent = parent.parent
-                     if grandparent and 'arithmatex' in (grandparent.get('class') or []):
-                         root_node = grandparent
-                     else:
-                         root_node = parent
-
-                root_node.replace_with(new_node)
-                continue
-        except Exception as e:
-            logger.warning(f"Failed to process KaTeX node: {e}")
-
-    # Legacy MathJax Fallback
-    for script in soup.find_all('script', type='math/tex'):
-        tex = script.get_text()
-        new_span = soup.new_tag('span')
-        new_span.string = f"${tex}$"
-        script.replace_with(new_span)
-        
-    # Remove Preview/Dummy spans
-    for junk in soup.find_all(class_=['MathJax_Preview', 'katex-html']):
-        junk.decompose()
-
         contents = tab_set.find_all(class_='tabbed-content')
         
         for i, label in enumerate(labels):
@@ -254,7 +167,8 @@ def transform_html_for_word(soup: BeautifulSoup):
                 # Append Content directly
                 content = contents[i]
                 # Remove class to prevent CSS interference if any
-                del content['class']
+                if 'class' in content.attrs:
+                    del content['class']
                 content['style'] = "margin-left: 8px; margin-bottom: 12px;"
                 flattened_div.append(content)
         
