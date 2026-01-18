@@ -230,6 +230,18 @@ def export_logic(...):
 
 ## 9. Handling PDF Exports (Safe Mode)
 
+### 9.1 Hybrid Math Rendering Strategy
+Math Rendering for PDF (`xhtml2pdf`) and Word (`htmldocx`) is challenging because they lack full JavaScript/CSS support. We use a **Hybrid Strategy**:
+
+1.  **Inline Math (`$x^2$`)**: Rendered as **Native Text**.
+    - Converted to `<span>` with `<sup>`/`<sub>` tags using the `parse_tex_to_html` helper.
+    - **Why?** Images in `xhtml2pdf` have poor vertical alignment (often floating above/below text). Native text flows perfectly and is vector-sharp.
+    
+2.  **Block Math (`$$...$$`)**: Rendered as **Images**.
+    - Generated via CodeCogs API/LaTeX and embedded as Base64 images.
+    - **Why?** Complex equations (matrices, integrals) cannot be rendered with simple HTML/CSS. Images provide 100% visual fidelity.
+    - **Scaling**: Images are generated at high DPI (300) and then scaled down (e.g., via `width`) to ensure print quality without being "poster-sized".
+
 If your plugin uses `xhtml2pdf`, beware that it uses a legacy CSS2 engine that **will crash** if it encounters modern CSS3 features (like `var()`, `calc()`, `clamp()`) often found in web stylesheets (`main.css`).
 
 **The "Safe Mode" Strategy:**
