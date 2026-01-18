@@ -11,6 +11,9 @@ ENABLED_FILE = PLUGIN_DIR / "ENABLED"
 DEPENDENCIES = ["xhtml2pdf"]
 
 import io
+import urllib.parse
+import requests
+import base64
 
 logger = logging.getLogger(__name__)
 
@@ -556,47 +559,204 @@ def transform_html_for_pdf(soup: BeautifulSoup):
         # Update CSS for .emoji-img - RETURNING IT instead of appending
 
         # 6. Transform Math (KaTeX/MathJax) -> Clean TeX
+        # Note: We prioritize extracting from 'annotation' tags which contain clean LaTeX.
         for katex_node in soup.find_all(class_='katex'):
+             # This loop handles KaTeX HTML structure if present, trying to replace it with a cleaner '$$...$$' block
+             # However, our main logic below (CodeCogs) will handle the conversion to Image.
+             # This block is for text-fallback or if we skip image generation.
+             # For now, we leave this as-is or we can remove it if it conflicts. 
+             # Actually, the user's "last commit" might have removed this? 
+             # Let's align with the .bak file which kept it but added the CodeCogs logic after.
+             pass
+
+        # -------------------------------------------------------------------------
+        # Math Transformation: Latex Script/Span -> Image (CodeCogs API)
+        # -------------------------------------------------------------------------
+        
+        # Arithmatex output can be <script type="math/tex"> (Legacy/MathJax) OR <span class="arithmatex">\(..\)</span> (Generic)
+        
+        # 1. Collect potential math nodes
+        candidates = []
+        candidates.extend(soup.find_all('script', type=re.compile(r'math/tex')))
+        candidates.extend(soup.find_all(class_='arithmatex'))
+        
+        if candidates:
+            print(f"DEBUG: Found {len(candidates)} Math formula candidates.")
+            
+        processed_ids = set()
+        
+        for node in candidates:
+            if id(node) in processed_ids:
+                continue
+                
+            target_node = node
+            parent = node.parent
+            if node.name == 'script' and parent and ('arithmatex' in (parent.get('class') or []) or 'MathJax' in str(parent.get('class') or [])):
+                target_node = parent
+            
+            if id(target_node) in processed_ids:
+                continue
+            
+            # Extract TeX
+            tex = ""
+            is_display = False
+            
             try:
-                annotation = katex_node.find('annotation', attrs={'encoding': 'application/x-tex'})
-                if annotation:
-                    tex_code = annotation.get_text().strip()
-                    is_block = False
-                    parent = katex_node.parent
-                    if parent and 'katex-display' in (parent.get('class') or []):
-                        is_block = True
+                # STRATEGY:
+                # 1. Script <script type="math/tex"> (Legacy MathJax) - Most reliable if present.
+                # 2. Annotation <annotation encoding="application/x-tex"> (Modern KaTeX/MathJax) - Cleanest source for HTML output.
+                # 3. Regex on raw HTML (Fallback) - Catches \(..\) if structure is weird.
+                # 4. get_text() (Last Resort) - Often dirty with preview text.
+                
+                script_child = target_node if target_node.name == 'script' else target_node.find('script', type=re.compile(r'math/tex'))
+                annotation_child = target_node.find('annotation', attrs={'encoding': 'application/x-tex'})
+                
+                if script_child:
+                    tex = script_child.get_text()
+                    is_display = 'mode=display' in script_child.get('type', '')
+                    processed_ids.add(id(script_child))
                     
-                    new_node = soup.new_tag('div' if is_block else 'span')
-                    if is_block:
-                        new_node.string = f"$$ {tex_code} $$"
-                        new_node['style'] = "display: block; margin: 10px 0; font-family: Courier; color: #333; background: #f5f5f5; padding: 5px;"
+                elif annotation_child:
+                    tex = annotation_child.get_text().strip()
+                    is_display = (target_node.name == 'div') or ('display' in target_node.get('class', [])) or ('katex-display' in target_node.decode_contents())
+                
+                else:
+                    # Fallback Regex
+                    node_html = str(target_node)
+                    inline_match = re.search(r'\\\((.*?)\\\)', node_html, re.DOTALL)
+                    block_match = re.search(r'\\\[(.*?)\\\]', node_html, re.DOTALL)
+                    
+                    if inline_match:
+                        tex = inline_match.group(1).strip()
+                        is_display = False
+                    elif block_match:
+                        tex = block_match.group(1).strip()
+                        is_display = True
                     else:
-                        new_node.string = f" ${tex_code}$ "
-                        new_node['style'] = "font-family: Courier; color: #333;"
-                    
-                    # Replace logic
-                    root_node = katex_node
-                    if parent and 'arithmatex' in (parent.get('class') or []):
-                        root_node = parent
-                    elif parent and parent.name == 'span' and 'katex-display' in (parent.get('class') or []):
-                            grandparent = parent.parent
-                            if grandparent and 'arithmatex' in (grandparent.get('class') or []):
-                                root_node = grandparent
-                            else:
-                                root_node = parent
-                    root_node.replace_with(new_node)
+                        raw_text = target_node.get_text().strip()
+                        if raw_text.startswith('\\(') and raw_text.endswith('\\)'):
+                            tex = raw_text[2:-2]
+                            is_display = False
+                        elif raw_text.startswith('\\[') and raw_text.endswith('\\]'):
+                            tex = raw_text[2:-2]
+                            is_display = True
+                        else:
+                            tex = raw_text
+                            is_display = (target_node.name == 'div')
+                            
+                if not tex or not tex.strip():
                     continue
-            except Exception:
-                pass
 
-
-
-        # Legacy MathJax Fallback
-        for script in soup.find_all('script', type='math/tex'):
-            tex = script.get_text()
-            new_span = factory_soup.new_tag('span')
-            new_span.string = f"${tex}$"
-            script.replace_with(new_span)
+                # Encode TeX for URL (CodeCogs)
+                base_url = "https://latex.codecogs.com/png.image"
+                params = f"\\dpi{{300}} {tex}"
+                safe_params = urllib.parse.quote(params)
+                url = f"{base_url}?{safe_params}"
+                
+                # Fetch image with User-Agent
+                headers = {
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+                }
+                response = requests.get(url, headers=headers, timeout=10)
+                
+                if response.status_code == 200:
+                    img_b64 = base64.b64encode(response.content).decode('ascii')
+                    data_uri = f"data:image/png;base64,{img_b64}"
+                    
+                    img_tag = factory_soup.new_tag('img')
+                    img_tag['src'] = data_uri
+                    
+                    if is_display:
+                        # Block Math
+                        table = factory_soup.new_tag('table', attrs={'width': '100%', 'border': '0'})
+                        tr = factory_soup.new_tag('tr')
+                        td = factory_soup.new_tag('td', attrs={'align': 'center', 'valign': 'middle'})
+                        img_tag['style'] = "width: 60%;" 
+                        td.append(img_tag)
+                        tr.append(td)
+                        table.append(tr)
+                        target_node.replace_with(table)
+                    else:
+                        # Inline Math
+                        img_tag['class'] = "math-inline"
+                        img_tag['style'] = "height: 14px; vertical-align: middle;" 
+                        target_node.replace_with(img_tag)
+                        
+                    processed_ids.add(id(target_node))
+                else:
+                    print(f"DEBUG: Math render failed: {response.status_code}")
+                    # Fallback
+                    new_span = factory_soup.new_tag('span')
+                    new_span.string = f"${tex}$"
+                    target_node.replace_with(new_span)
+                    
+            except Exception as e:
+                print(f"DEBUG: Math rendering exception: {e}")
+                # Fallback safely
+                try:
+                    new_span = factory_soup.new_tag('span')
+                    new_span.string = f"${tex}$"
+                    target_node.replace_with(new_span)
+                except:
+                    pass
+        # We fetch a generic PNG render from CodeCogs to embed in PDF
+        
+        math_scripts = soup.find_all('script', type=re.compile(r'math/tex'))
+        if math_scripts:
+            print(f"DEBUG: Found {len(math_scripts)} Math formulas to render.")
+            
+        for script in math_scripts:
+            try:
+                tex = script.get_text()
+                is_display = 'mode=display' in script.get('type', '')
+                
+                # Encode TeX for URL
+                # Add decent DPI for print quality
+                base_url = "https://latex.codecogs.com/png.image"
+                params = f"\\dpi{{300}} {tex}"
+                safe_params = urllib.parse.quote(params)
+                url = f"{base_url}?{safe_params}"
+                
+                print(f"DEBUG: Fetching Math Render: {tex[:20]}...")
+                
+                # Fetch image
+                response = requests.get(url, timeout=5)
+                
+                if response.status_code == 200:
+                    # Convert to Base64
+                    img_b64 = base64.b64encode(response.content).decode('ascii')
+                    data_uri = f"data:image/png;base64,{img_b64}"
+                    
+                    # Create Img Tag
+                    img_tag = factory_soup.new_tag('img')
+                    img_tag['src'] = data_uri
+                    
+                    # Styling
+                    if is_display:
+                        # Block Math
+                        div_wrapper = factory_soup.new_tag('div')
+                        div_wrapper['style'] = "text-align: center; margin: 10px 0;"
+                        img_tag['style'] = "max-width: 100%;" # avoid overflow
+                        div_wrapper.append(img_tag)
+                        script.replace_with(div_wrapper)
+                    else:
+                        # Inline Math
+                        # Vertical align middle ensures it sits well with text
+                        img_tag['style'] = "vertical-align: middle; max-height: 1.2em;" 
+                        script.replace_with(img_tag)
+                else:
+                    print(f"DEBUG: Math render failed: {response.status_code}")
+                    # Fallback to text
+                    new_span = factory_soup.new_tag('span')
+                    new_span.string = f"${tex}$"
+                    script.replace_with(new_span)
+                    
+            except Exception as e:
+                print(f"DEBUG: Math rendering exception: {e}")
+                # Fallback
+                new_span = factory_soup.new_tag('span')
+                new_span.string = f"${tex}$"
+                script.replace_with(new_span)
             
         # -------------------------------------------------------------------------
         # Footnote Transformation: List -> Table (Fixes Numbering Visibility)
@@ -678,6 +838,55 @@ def transform_html_for_pdf(soup: BeautifulSoup):
         # Remove Preview/Dummy spans
         for junk in soup.find_all(class_=['MathJax_Preview', 'katex-html']):
             if junk: junk.decompose()
+
+        # -------------------------------------------------------------------------
+        # Layout Fix: Wrap INLINE MATH in Tables
+        # -------------------------------------------------------------------------
+        # Similar to Emojis, we wrap inline math to prevent clipping in xhtml2pdf.
+        # This is kept SEPARATE from emoji handling for clarity.
+        math_blocks_to_wrap = set()
+        
+        # We look specifically for the class we added earlier: 'math-inline'
+        for img in soup.find_all('img', class_='math-inline'):
+            # Find parent block
+            parent = img.find_parent(['p', 'li', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6'])
+            if parent:
+                math_blocks_to_wrap.add(parent)
+                
+        if math_blocks_to_wrap:
+            print(f"DEBUG: Wrapping {len(math_blocks_to_wrap)} blocks containing inline math.")
+            
+        for block in math_blocks_to_wrap:
+            # Create Table Structure
+            table = factory_soup.new_tag("table")
+            table['style'] = "width: 100%; border-collapse: collapse; margin-bottom: 0px;"
+            table['border'] = "0"
+            table['cellpadding'] = "0"
+            
+            tr = factory_soup.new_tag("tr")
+            td = factory_soup.new_tag("td")
+            
+            # COPY ATTRIBUTES
+            if 'class' in block.attrs:
+                td['class'] = block['class']
+            
+            # Merge styles
+            base_style = "border: none; padding: 0; vertical-align: top; color: black; font-family: Helvetica, Arial, sans-serif;"
+            block_style = block.get('style', '')
+            td['style'] = f"{base_style} {block_style}"
+            
+            # Move contents
+            contents = list(block.contents)
+            for item in contents:
+                td.append(item)
+            
+            tr.append(td)
+            table.append(tr)
+            
+            if block.name == 'p':
+                block.replace_with(table)
+            else:
+                block.append(table)
 
     except Exception as e:
         logger.error(f"PDFExport: transformation error: {e}")
