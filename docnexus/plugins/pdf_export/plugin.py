@@ -142,6 +142,26 @@ def transform_html_for_pdf(soup: BeautifulSoup):
             
             tab_set.replace_with(flattened_div)
 
+        # 3.5 Abbreviation Handling (First-Use Expansion)
+        # Standard Print practice: Expand "Abbr (Definition)" on first use, then just "Abbr".
+        seen_abbrs = set()
+        for abbr in soup.find_all('abbr'):
+            title = abbr.get('title')
+            text = abbr.get_text().strip()
+            
+            if title and text:
+                key = (text, title)
+                if key not in seen_abbrs:
+                    # First time seeing this abbreviation: Expand it
+                    # We create a span to hold "Text (Title)"
+                    new_content = f"{text} ({title})"
+                    abbr.string = new_content
+                    # Mark as seen
+                    seen_abbrs.add(key)
+                else:
+                     # Subsequent use: Just styling (handled by CSS)
+                     pass
+
         # 4. Transform Collapsible Details -> DIV with Bold Header
         for details in soup.find_all('details'):
             if not isinstance(details, Tag): continue
@@ -1140,6 +1160,9 @@ def export_pdf(content_html: str) -> bytes:
                 }
                 
                 h1 { border-bottom: 2px solid #333; padding-bottom: 5px; }
+
+                /* Abbreviations */
+                abbr { text-decoration: none; border-bottom: 1px dotted #666; cursor: help; }
                 
                 /* Definition Lists */
                 dl { margin-bottom: 15px; }
