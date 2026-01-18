@@ -1,13 +1,3 @@
-Viewer is not loading for on clicking edit. - Done
-Viewer is not intuative for edit. - Done
-On this page should be on left instead of right. - Done (Configurable preference)
-Specific file browse button is missing. - Done
-The go to hub button should be brought back and it should be made similar to top rated tools - Done
-Workspace does not show the subfolder inside if any. - done
-The styling of table of content needs to be improved. - done
-The plugin feature for different features support needs to be added.  - Done
-Why the side bar not available in txt file. - Done
-The left to right shuffle of side bar can be done using a arrow. - Done (Shuffle Button)
 Check the backup files seen after editing. The reason, retention and issues. - Done
 Make release work with localhost as well as global/public ip. - Done
 
@@ -61,4 +51,4 @@ Missing Markdown Features (Audit & Roadmap):
 
 Bugs (To Fix in Next Release):
 -> Bullet points vanish when containing Inline Emojis or Math Formulas (due to table wrapping logic).
--> Emoji size in Block sections is appearing too large.
+-> Emoji size in Block sections is appearing a bit strecheds.

@@ -11,6 +11,10 @@ sys.path.insert(0, project_root)
 
 # Import plugin logic
 from docnexus.plugins.pdf_export.plugin import transform_html_for_pdf
+import logging
+
+# Configure logging to show errors
+# logging.basicConfig(level=logging.ERROR)
 
 def test_pdf_rendering_components():
     print("==================================================")
@@ -102,6 +106,11 @@ def test_pdf_rendering_components():
     # 3. Footnote
     if '<table class="footnote-table"' not in output_html:
         errors.append("Footnote: Table structure not found.")
+        # Debug print
+        print("\n[DEBUG] Footnote Output Snippet:")
+        start_idx = output_html.find("Footnotes")
+        if start_idx != -1:
+            print(output_html[start_idx:start_idx+1000])
     else:
         print("[PASS] Footnote: Converted to Table.")
 

@@ -884,11 +884,16 @@ def transform_html_for_pdf(soup: BeautifulSoup):
                 script.replace_with(new_span)
             
         # -------------------------------------------------------------------------
+        # -------------------------------------------------------------------------
         # Footnote Transformation: List -> Table (Fixes Numbering Visibility)
         # -------------------------------------------------------------------------
-        footnote_div = soup.find('div', class_='footnote')
-        if footnote_div:
+        # Handle multiple footnote areas if present
+        for footnote_div in soup.find_all('div', class_='footnote'):
+            # Find the list (ordered or unordered)
             ol = footnote_div.find('ol')
+            if not ol:
+                 ol = footnote_div.find('ul')
+            
             if ol:
                 # Create a new table to replace the list
                 # Use legacy attributes to kill all default spacing and enforce left align
