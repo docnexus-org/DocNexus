@@ -4,6 +4,7 @@ A Flask-based web application that presents Markdown files from a folder as well
 """
 
 from flask import Flask, render_template, send_from_directory, request, jsonify, redirect, url_for, abort, Response, session, send_file
+from werkzeug.utils import secure_filename
 import os
 import sys
 import markdown
@@ -532,9 +533,9 @@ SIP_KNOWLEDGE = {
     'sdp_attributes': ['RTP', 'SRTP', 'RTCP', 'codec', 'sendrecv', 'recvonly', 'sendonly']
 }
 
-def get_markdown_files(subdir=None, recursive=True):
+def get_document_files(subdir=None, recursive=True):
     """
-    Get markdown files and subdirectories.
+    Get document files and subdirectories.
     If recursive=True, returns flat list of all files (legacy behavior).
     If recursive=False, returns list of files and directories in subdir.
     """
@@ -565,11 +566,12 @@ def get_markdown_files(subdir=None, recursive=True):
         rel_path_obj = file_path.relative_to(Path(MD_FOLDER)) 
         rel_path = str(rel_path_obj).replace('\\', '/')
         
+        # Global Ignore: Hidden folders (start with .)
+        if any(p.startswith('.') for p in rel_path_obj.parts):
+            continue
+        
         # Handle Directories (Only in non-recursive mode)
         if not recursive and file_path.is_dir():
-            # Skip hidden folders
-            if file_path.name.startswith('.'): continue
-            
             items.append({
                 'name': file_path.name,
                 'filename': file_path.name,
@@ -1205,7 +1207,7 @@ def index():
     folder = request.args.get('folder', '').strip()
     
     # Use non-recursive mode to browse specific folder
-    items = get_markdown_files(subdir=folder, recursive=False)
+    items = get_document_files(subdir=folder, recursive=False)
     
     logger.info(f"Index route (folder='{folder}'): Found {len(items)} items")
     return render_template('index.html', files=items, md_folder=str(MD_FOLDER), current_folder=folder, version=VERSION)
@@ -1214,7 +1216,7 @@ def index():
 def debug_info():
     """Debug endpoint to show configuration and file discovery."""
     import os
-    md_files = get_markdown_files()
+    md_files = get_document_files()
     return jsonify({
         'project_root': str(PROJECT_ROOT),
         'md_folder': str(MD_FOLDER),
@@ -1426,7 +1428,7 @@ def preview_file():
         if filename.lower().endswith('.pdf'):
             try:
                 # Save to temp
-                temp_dir = Path(app.config['UPLOAD_FOLDER']) / 'temp'
+                temp_dir = MD_FOLDER / '.temp'
                 temp_dir.mkdir(parents=True, exist_ok=True)
                 temp_filename = secure_filename(filename)
                 temp_path = temp_dir / temp_filename
@@ -1439,18 +1441,11 @@ def preview_file():
                 file_info = {
                     'name': Path(filename).stem,
                     'filename': filename,
-                    'relative_path': f"temp/{temp_filename}", # Virtual path
+                    'relative_path': f".temp/{temp_filename}", # Virtual path
                     'content': f'''
                         <div class="pdf-container" style="height: calc(100vh - 190px); width: 100%; overflow: hidden; border-radius: 8px; border: 1px solid var(--border-color);">
-                            <!-- Use a route that serves from temp or raw if confirmed -->
-                            <!-- For preview, we might need a specific temp route or just serve_raw if we move it to MD_FOLDER temporarily -->
-                            <!-- CURRENTLY: Preview uploads shouldn't go to MD_FOLDER until Saved. -->
-                            <!-- We need a route to serve temp/preview files. -->
-                            <div style="padding: 2rem; text-align: center; color: var(--text-muted);">
-                                <i class="fas fa-file-pdf" style="font-size: 3rem; margin-bottom: 1rem;"></i>
-                                <p>PDF Preview is available after saving.</p>
-                                <p style="font-size: 0.8rem;">To view this PDF, please save it to your workspace.</p>
-                            </div>
+                             <iframe src="/raw/.temp/{temp_filename}" width="100%" height="100%" style="border:none;">
+                            </iframe>
                         </div>
                     ''',
                     'toc': "",
@@ -1579,7 +1574,7 @@ def search():
     
     query_lower = query.lower()
     results = []
-    md_files = get_markdown_files()
+    md_files = get_document_files()
     
     for file_info in md_files:
         # Search in filename
@@ -1825,7 +1820,7 @@ def search_files():
     
     matches = []
     # Reuse existing logic to get file list
-    all_files = get_markdown_files()
+    all_files = get_document_files()
     
     for file_info in all_files:
         # Check filename match first (fastest)
