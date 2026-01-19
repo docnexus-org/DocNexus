@@ -230,6 +230,18 @@ def export_logic(...):
 
 ## 9. Handling PDF Exports (Safe Mode)
 
+### 9.1 Hybrid Math Rendering Strategy
+Math Rendering for PDF (`xhtml2pdf`) and Word (`htmldocx`) is challenging because they lack full JavaScript/CSS support. We use a **Hybrid Strategy**:
+
+1.  **Inline Math (`$x^2$`)**: Rendered as **Native Text**.
+    - Converted to `<span>` with `<sup>`/`<sub>` tags using the `parse_tex_to_html` helper.
+    - **Why?** Images in `xhtml2pdf` have poor vertical alignment (often floating above/below text). Native text flows perfectly and is vector-sharp.
+    
+2.  **Block Math (`$$...$$`)**: Rendered as **Images**.
+    - Generated via CodeCogs API/LaTeX and embedded as Base64 images.
+    - **Why?** Complex equations (matrices, integrals) cannot be rendered with simple HTML/CSS. Images provide 100% visual fidelity.
+    - **Scaling**: Images are generated at high DPI (300) and then scaled down (e.g., via `width`) to ensure print quality without being "poster-sized".
+
 If your plugin uses `xhtml2pdf`, beware that it uses a legacy CSS2 engine that **will crash** if it encounters modern CSS3 features (like `var()`, `calc()`, `clamp()`) often found in web stylesheets (`main.css`).
 
 **The "Safe Mode" Strategy:**
@@ -238,9 +250,39 @@ Do NOT attempt to reuse the web UI stylesheets for PDF generation. Instead:
 2.  **Strip Inline Styles**: Aggressively remove `<style>` blocks and `style="..."` attributes if they might contain variables.
 3.  **Inject Safe CSS**: Provide a custom, internal stylesheet within your plugin that uses only standard CSS2 properties (e.g., standard hex colors, simple margins).
 
+
+## 10. Dependency Management & Import Guidelines (Critical)
+
+### 10.1 Avoiding `UnboundLocalError` (Shadowing)
+A common crash in Python plugins occurs when you import a module **inside a function** that is also imported **globally**.
+
+**The Anti-Pattern (DO NOT DO THIS):**
 ```python
-# Example Safe Mode Logic
-full_html = re.sub(r'<link[^>]+rel=["\']stylesheet["\'][^>]*>', '', content_html)
-full_html = re.sub(r'<style\b[^>]*>.*?</style>', '', full_html, flags=re.DOTALL)
-# ... apply safe internal styles ...
+import re  # Global Import
+
+def my_function():
+    # Usage BEFORE local import -> CRASH (UnboundLocalError)
+    match = re.search(...) 
+    
+    if condition:
+        import re  # <--- Local import shadows global 're' for the ENTIRE function scope!
 ```
+
+**The Fix:**
+- **Always imports standard libraries globally** at the top of the file (`import re`, `import json`, `import os`).
+- **Never re-import** standard libraries inside functions.
+- If you need a conditional import for a heavy 3rd-party library, ensuring it doesn't shadow a global name.
+
+### 10.2 PyInstaller & Dependencies
+When DocNexus is built as an EXE explanation (PyInstaller), your plugin's dependencies must be known at build time.
+
+1.  **Standard Libraries**: (e.g., `re`, `json`, `urllib`) are always available. You do not need to list them anywhere.
+2.  **PyPI Packages**: If your plugin uses a new PyPI package (e.g. `pandas`), you MUST add it to the `hidden_imports` list in `scripts/build.py`.
+    - If you don't, the EXE will crash with `ModuleNotFoundError` even if it works in dev.
+3.  **Dynamic Imports**: Libraries that use `__import__` or `importlib` (like `reportlab` or `xhtml2pdf`) need special handling. Use `collect_submodules` in the build script.
+
+**Checklist for New Dependencies:**
+- [ ] Add to `requirements.txt`
+- [ ] Add to `hidden_imports` in `scripts/build.py`
+- [ ] Re-run `make build` to verify inclusion in the EXE.
+

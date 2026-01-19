@@ -36,6 +36,27 @@ A professional, enterprise-grade documentation platform with a modern UI, integr
 - **Smart Sequence Diagrams**: Auto-converts text interactions into Mermaid sequence diagrams.
 - **Smart Topology**: Transforms ASCII network diagrams into visual topology graphs.
 - **Smart Tables**: Formats ASCII tables into sortable data grids.
+- **Smart Diagrams (Mermaid)**: Native support for Code definitions to Diagrams.
+  - **Flowcharts**:
+    ```plaintext
+    graph TD;
+      A[Start] --> B{Is it?};
+      B -- Yes --> C[OK];
+      B -- No --> D[Debug];
+    ```
+
+  - **Sequence**:
+    ```plaintext
+    sequenceDiagram
+      Alice->>John: Hello!
+      John-->>Alice: Hi!
+    ```
+  - **Class**:
+    ```plaintext
+    classDiagram
+      Animal <|-- Duck
+    ```
+  - *Usage: simply wrap your mermaid code in a fenced block marked with `mermaid`.*
 
 ### Export Capabilities
 - **Word Export (.docx)**: High-fidelity export including images, tables, and clickable Table of Contents.
@@ -57,6 +78,7 @@ make build    # Creates a standalone executable in build/output/
 ```bash
 pip install docnexus
 docnexus start
+docnexus --version  # Check version, build time, and build type (Dev/Release)
 ```
 
 ---
@@ -64,7 +86,7 @@ docnexus start
 ## Usage Guide
 
 ### Organizing Documentation
-DocNexus uses a file-system based approach. Simply place your files in the `examples/` or `markdown_files/` directory (configurable).
+DocNexus uses a file-system based approach. Simply place your files in the `docs/examples/` or `markdown_files/` directory (configurable).
 
 ```
 root/

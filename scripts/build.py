@@ -156,7 +156,7 @@ def get_hidden_imports_from_venv(package_name):
         log(f"Warning: Could not collect hidden imports for {package_name}: {e}", Colors.WARNING)
         return []
 
-def build():
+def build(build_type="Dev"):
     """Build the standalone executable."""
     # Get Version and Sync to VERSION file
     try:
@@ -171,7 +171,17 @@ def build():
         version_file = PROJECT_ROOT / "VERSION"
         with open(version_file, "w") as vf:
             vf.write(version)
+            
+        # Inject Build Timestamp into version_info.py for the build
+        # We rewrite the file with the timestamp
+        timestamp = __import__('datetime').datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        with open(init_file, "w") as f:
+            f.write(f"__version__ = '{version}'\n")
+            f.write(f"__build_timestamp__ = '{timestamp}'\n")
+            f.write(f"__build_type__ = '{build_type}'\n")
+            
         log(f"Synced VERSION file to {version}", Colors.OKBLUE)
+        log(f"Injected timestamp {timestamp}", Colors.OKBLUE)
         
     except Exception as e:
         log(f"Warning: Could not sync version: {e}", Colors.WARNING)
@@ -211,13 +221,16 @@ def build():
         "pymdownx.inlinehilite", "pymdownx.keys", "pymdownx.smartsymbols",
         "pymdownx.snippets", "pymdownx.tilde", "pymdownx.caret",
         "pymdownx.mark", "pymdownx.emoji", "pymdownx.saneheaders",
+        # "pymdownx.smarty", # Removed
+        "pymdownx.critic",
+        "markdown.extensions.meta", "markdown.extensions.wikilinks", "markdown.extensions.smarty",
         # Core Plugins
         "docnexus.plugins.editor",
         "docnexus.plugins.editor.routes",
     ]
     
     # Dynamic collection for complex packages
-    for pkg in ["xhtml2pdf", "reportlab", "html5lib", "lxml", "docx", "bs4", "htmldocx"]:
+    for pkg in ["xhtml2pdf", "reportlab", "html5lib", "lxml", "docx", "bs4", "htmldocx", "pymdownx", "markdown"]:
         hidden_imports.extend(get_hidden_imports_from_venv(pkg))
 
     for imp in hidden_imports:
@@ -235,7 +248,7 @@ def build():
     run(cmd)
     
     # Copy Examples Folder for Distribution as 'workspace'
-    examples_src = PROJECT_ROOT / "examples"
+    examples_src = PROJECT_ROOT / "docs" / "examples"
     examples_dst = OUTPUT_DIR / "workspace"
     if examples_src.exists():
         log(f"Copying examples to dist/workspace: {examples_dst}", Colors.OKGREEN)
@@ -257,7 +270,7 @@ def build():
 def release():
     """Build and Zip."""
     # 1. Build
-    build()
+    build(build_type="Release")
     
     # 2. Get Version
     try:
@@ -271,9 +284,15 @@ def release():
         version = "0.0.0"
         
     release_name = f"DocNexus_v{version}"
-    release_dir = PROJECT_ROOT / "releases" / release_name
+    releases_root = PROJECT_ROOT / "releases"
+    archive_dir = releases_root / "archive"
+    release_dir = archive_dir / release_name
     
-    log(f"Creating Release: {release_name}", Colors.OKCYAN)
+    # Create structure
+    if not archive_dir.exists():
+        archive_dir.mkdir(parents=True)
+        
+    log(f"Creating Release in Archive: {release_name}", Colors.OKCYAN)
     
     # 3. Create Release Directory
     if release_dir.exists():
@@ -289,12 +308,34 @@ def release():
         else:
             shutil.copy2(item, release_dir / item.name)
             
-    # 5. Zip
-    zip_path = PROJECT_ROOT / "releases" / f"{release_name}.zip"
+    # 5. Zip to Archive
+    zip_path = archive_dir / f"{release_name}.zip"
     log(f"Zipping to {zip_path}...", Colors.OKGREEN)
     shutil.make_archive(str(zip_path.with_suffix('')), 'zip', release_dir)
     
+    # 6. Update Latest
+    latest_dir = releases_root / "latest"
+    latest_zip = releases_root / "latest.zip"
+    
+    log("Updating latest...", Colors.OKCYAN)
+    
+    # Remove old latest
+    if latest_dir.exists():
+        if latest_dir.is_symlink():
+            os.remove(latest_dir)
+        else:
+            shutil.rmtree(latest_dir)
+    if latest_zip.exists():
+        os.remove(latest_zip)
+        
+    # Copy new latest
+    # We use copy instead of symlink to ensure it works on all Windows restricted envs
+    # and to make "latest" a standalone artifact.
+    shutil.copytree(release_dir, latest_dir)
+    shutil.copy2(zip_path, latest_zip)
+    
     log(f"Release Complete: {zip_path}", Colors.BOLD)
+    log(f"Latest Updated: {latest_zip}", Colors.BOLD)
 
 def run_dev():
     """Run from source."""

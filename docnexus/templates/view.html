@@ -19,13 +19,113 @@
     <link rel="stylesheet" href="https://uicdn.toast.com/editor/latest/theme/toastui-editor-dark.min.css" />
 
     <!-- Code Highlight Theme (Dynamic) -->
-    <link id="highlightTheme" rel="stylesheet"
-        href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github.min.css">
+    <!-- Code Highlight Theme (Server-Side) -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='pygments.css') }}">
+
+    <!-- KaTeX -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/katex.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/katex.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/contrib/auto-render.min.js"></script>
 
     <!-- Mermaid -->
     <script src="https://cdn.jsdelivr.net/npm/mermaid/dist/mermaid.min.js"></script>
     <script>
-        mermaid.initialize({ startOnLoad: true, theme: 'default' });
+        // Dynamic Mermaid Configuration
+        const mermaidConfig = {
+            startOnLoad: false, // We control rendering
+            flowchart: { htmlLabels: false },
+            securityLevel: 'loose',
+            fontFamily: 'Inter, sans-serif',
+        };
+
+        async function renderMermaid() {
+            const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+            const theme = isDark ? 'dark' : 'default';
+
+            // High Contrast Overrides
+            const themeVariables = isDark ? {
+                // Dark Mode Contrast
+                primaryColor: '#1e293b',    // Slate 800
+                primaryTextColor: '#f8fafc', // Slate 50 (High Contrast)
+                primaryBorderColor: '#94a3b8', // Slate 400
+                lineColor: '#cbd5e1',       // Slate 300
+                secondaryColor: '#334155',  // Slate 700
+                tertiaryColor: '#1e293b',   // Slate 800
+                mainBkg: '#1e293b',         // Background for nodes
+                nodeBorder: '#94a3b8',      // Border color
+            } : {
+                // Light Mode Contrast
+                primaryColor: '#ffffff',     // White
+                primaryTextColor: '#0f172a', // Slate 900 (High Contrast)
+                primaryBorderColor: '#334155', // Slate 700
+                lineColor: '#334155',        // Slate 700
+                secondaryColor: '#f1f5f9',   // Slate 100
+                tertiaryColor: '#ffffff',    // White
+                mainBkg: '#ffffff',
+                nodeBorder: '#334155',
+            };
+
+            // Re-initialize with new theme and variables
+            mermaid.initialize({
+                ...mermaidConfig,
+                theme: theme,
+                themeVariables: themeVariables
+            });
+
+            // Process all .mermaid divs
+            const nodes = document.querySelectorAll('.mermaid');
+
+            for (const node of nodes) {
+                // 1. Capture Source (First Run Only)
+                if (!node.getAttribute('data-source')) {
+                    node.setAttribute('data-source', node.textContent);
+                }
+
+                // 2. Restore Source (Wipe previous SVG)
+                const source = node.getAttribute('data-source');
+                node.removeAttribute('data-processed'); // Reset for Mermaid
+                node.innerHTML = source; // Restore raw text
+            }
+
+            // 3. Render Async
+            try {
+                await mermaid.run({
+                    nodes: nodes
+                });
+            } catch (e) {
+                console.error("Mermaid Render Error:", e);
+            }
+        }
+
+        // Init on Load
+        document.addEventListener('DOMContentLoaded', () => {
+            // KaTeX Math Rendering
+            renderMathInElement(document.body, {
+                delimiters: [
+                    { left: '$$', right: '$$', display: true },
+                    { left: '$', right: '$', display: false },
+                    { left: '\\(', right: '\\)', display: false },
+                    { left: '\\[', right: '\\]', display: true }
+                ],
+                throwOnError: false
+            });
+
+            renderMermaid();
+
+            // Watch for Theme Changes
+            const observer = new MutationObserver((mutations) => {
+                mutations.forEach((mutation) => {
+                    if (mutation.type === 'attributes' && mutation.attributeName === 'data-theme') {
+                        renderMermaid();
+                    }
+                });
+            });
+
+            observer.observe(document.documentElement, {
+                attributes: true,
+                attributeFilter: ['data-theme']
+            });
+        });
     </script>
 
     <!-- Shared Theme -->
@@ -37,6 +137,9 @@
     <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
     <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js"
         onload="renderMathInElement(document.body);"></script>
+
+    <!-- Canvg for SVG Rasterization -->
+    <script src="https://cdn.jsdelivr.net/npm/canvg@3.0.10/lib/umd.js"></script>
 
     <!-- Theme Init (Prevent Flash) -->
     <script>
@@ -835,6 +938,22 @@
             transform: translateY(-1px);
             box-shadow: 0 6px 16px rgba(99, 102, 241, 0.4);
         }
+
+        /* Shuffle Button (Ghost Style) */
+        .btn-shuffle {
+            color: var(--color-text-tertiary);
+            opacity: 0.4;
+            transition: all 0.2s ease;
+            background: transparent !important;
+            border: none;
+            padding: 4px;
+        }
+
+        .btn-shuffle:hover {
+            opacity: 1;
+            transform: scale(1.1);
+            color: var(--color-accent-primary);
+        }
     </style>
 </head>
 
@@ -898,7 +1017,22 @@
     </nav>
 
     <!-- Main Content -->
+    <!-- Main Content -->
     <div class="main-container">
+        <script>
+            // Anti-FOUC: Apply TOC position immediately
+            (function () {
+                const savedPos = localStorage.getItem('tocPosition') || 'right';
+                const container = document.currentScript.parentElement;
+                if (savedPos === 'left') {
+                    container.classList.add('toc-left');
+                    container.classList.remove('toc-right');
+                } else {
+                    container.classList.remove('toc-left');
+                    container.classList.add('toc-right');
+                }
+            })();
+        </script>
         <main class="content-area">
             <div id="documentContent">
                 <!-- Slot: CONTENT_START -->
@@ -945,8 +1079,14 @@
         </main>
 
         <!-- Sidebar ToC -->
+        <!-- Sidebar ToC -->
         <aside class="toc-sidebar">
-            <div class="toc-title">On this page</div>
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                <div class="toc-title" style="margin-bottom: 0;">On this page</div>
+                <button class="btn-icon btn-shuffle" onclick="LayoutManager.toggle()" title="Switch Layout">
+                    <i class="fas fa-arrow-right-arrow-left"></i>
+                </button>
+            </div>
             <nav id="tocNav" class="toc-nav"></nav>
 
             <!-- Slot: SIDEBAR_BOTTOM -->
@@ -978,7 +1118,8 @@
         let editorInstance = null;
 
         // Highlight logic for view mode
-        hljs.highlightAll();
+        // Highlight logic for view mode
+        // hljs.highlightAll(); // Disabled: Server-side highlighting is used
 
         function generateId(text) {
             return text.toLowerCase().replace(/[^\w\s-]/g, '').replace(/\s+/g, '-').replace(/--+/g, '-').trim();
@@ -990,10 +1131,10 @@
 
             if (!content || !tocNav) return;
 
-            const headers = content.querySelectorAll('h2, h3');
+            const headers = content.querySelectorAll('h1, h2, h3');
             if (headers.length === 0) {
-                const sidebar = document.querySelector('.toc-sidebar');
-                if (sidebar) sidebar.style.display = 'none';
+                // Empty State
+                tocNav.innerHTML = '<div style="color:var(--color-text-tertiary); font-size:0.85rem; padding:10px 0;">No outline available</div>';
                 return;
             }
 
@@ -1185,17 +1326,301 @@
             performExport('/api/export/docx', 'docx');
         }
 
-        function performExport(endpoint, ext) {
+        async function performExport(endpoint, ext) {
             const btn = document.getElementById('exportBtn');
             const orig = btn.innerHTML;
             btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
 
-            const html = document.documentElement.outerHTML;
+            // 1. Prepare Content (Clone to avoid messing up UI)
+            // We must rasterize Mermaids on the LIVE DOM (so styles apply), then move images to clone.
+            const clone = document.documentElement.cloneNode(true);
+
+            const mermaidDivs = document.querySelectorAll('.mermaid');
+            const cloneMermaidDivs = clone.querySelectorAll('.mermaid');
+
+            if (mermaidDivs.length > 0) {
+                console.log(`Rasterizing ${mermaidDivs.length} diagrams...`);
+
+                // Helper to load image
+                const loadImage = (src) => new Promise((resolve, reject) => {
+                    const img = new Image();
+                    img.onload = () => resolve(img);
+                    img.onerror = reject;
+                    img.src = src;
+                });
+
+                try {
+                    for (let i = 0; i < mermaidDivs.length; i++) {
+                        const original = mermaidDivs[i];
+                        const target = cloneMermaidDivs[i];
+                        const svg = original.querySelector('svg');
+
+                        if (svg) {
+                            // 1. Inline Styles on the LIVE SVG (Safe? No, modify the serialized string context essentially)
+                            // We should clone the SVG node first to not mess up the live view, then inline styles on the CLONE.
+                            // But getComputedStyle needs to run on the LIVE node.
+                            // Strategy: Iterate live node, get styles, apply to a cloned node.
+
+                            // Better approach:
+                            // We can use a deep clone of the SVG.
+                            const svgClone = svg.cloneNode(true);
+
+                            // We must map styles from original to clone. 
+                            // This is expensive but necessary.
+                            // Recursive walker
+                            const inlineOnClone = (orig, cln) => {
+                                if (orig.nodeType === 1) { // Element
+                                    const s = window.getComputedStyle(orig);
+
+                                    // Copy style to style object
+                                    cln.style.fill = s.fill;
+                                    cln.style.stroke = s.stroke;
+                                    cln.style.strokeWidth = s.strokeWidth;
+                                    cln.style.fontFamily = s.fontFamily;
+                                    cln.style.fontSize = s.fontSize;
+                                    cln.style.fontWeight = s.fontWeight;
+                                    cln.style.opacity = s.opacity;
+
+                                    // CRITICAL: Canvg often needs ATTRIBUTES for text, not just styles
+                                    if (orig.tagName === 'text' || orig.tagName === 'tspan' || orig.tagName === 'g') {
+                                        let fillColor = s.fill;
+                                        let origin = 'computed';
+
+                                        // 1. Handle Invalid/Transparent
+                                        if (!fillColor || fillColor === 'none' || fillColor === 'transparent' || fillColor.includes('rgba(0, 0, 0, 0)')) {
+                                            fillColor = '#333333';
+                                            origin = 'fallback';
+                                        } else {
+                                            // 2. Handle Light Colors (White text on White Canvas)
+                                            // Parse RGB
+                                            const rgbMatch = fillColor.match(/\d+/g);
+                                            if (rgbMatch && rgbMatch.length >= 3) {
+                                                const r = parseInt(rgbMatch[0]);
+                                                const g = parseInt(rgbMatch[1]);
+                                                const b = parseInt(rgbMatch[2]);
+                                                // YIQ Luminance formula
+                                                const yiq = ((r * 299) + (g * 587) + (b * 114)) / 1000;
+                                                if (yiq > 200) { // It's light color
+                                                    fillColor = '#000000';
+                                                    origin = 'contrast-boost';
+                                                }
+                                            }
+                                        }
+
+                                        // Debug Log
+                                        if (orig.tagName === 'text' || (orig.textContent && orig.textContent.trim().length > 0)) {
+                                            console.log(`[Mermaid Debug] Tag: ${orig.tagName} | Content: "${orig.textContent.trim().substring(0, 20)}..." | Fill: ${s.fill} -> ${fillColor} (${origin}) | Font: ${s.fontFamily}`);
+                                        }
+
+                                        // Set attributes explicitly
+                                        cln.setAttribute('fill', fillColor);
+                                        cln.setAttribute('font-family', s.fontFamily || 'Arial, sans-serif');
+                                        cln.setAttribute('font-size', s.fontSize || '14px');
+
+                                        // Force Opacity/Visibility
+                                        cln.style.opacity = '1';
+                                        cln.style.visibility = 'visible';
+
+                                        // Also force style for good measure
+                                        cln.style.fill = fillColor;
+                                        cln.style.color = fillColor;
+                                        cln.style.fontFamily = s.fontFamily || 'Arial, sans-serif';
+
+                                        // 3. REMOVE STROKE on Text (Fixes blurry/blob text)
+                                        if (orig.tagName === 'text' || orig.tagName === 'tspan') {
+                                            cln.style.stroke = 'none';
+                                            cln.setAttribute('stroke', 'none');
+                                            cln.setAttribute('stroke-width', '0');
+                                        }
+                                    }
+
+                                    // 4. ForeignObject Shim for Canvg (Crucial for Block/Class Diagrams)
+                                    if (orig.tagName === 'foreignObject') {
+                                        console.warn('[Mermaid Shim] ForeignObject detected. Converting to Text for Canvg compatibility.');
+                                        const x = parseFloat(orig.getAttribute('x') || 0);
+                                        const y = parseFloat(orig.getAttribute('y') || 0);
+                                        const width = parseFloat(orig.getAttribute('width') || 100);
+                                        // const height = parseFloat(orig.getAttribute('height') || 50); 
+
+                                        // Check textContent but respect newlines if possible
+                                        // innerText often preserves newlines better than textContent for rendered HTML
+                                        const rawText = orig.innerText || orig.textContent || "";
+                                        const textContent = rawText.trim();
+
+                                        if (textContent) {
+                                            // LOGIC UPGRADE:
+                                            // 1. Split by logical newlines first. This preserves "Class Diagram" lists.
+                                            // 2. If > 1 logical line -> Default LEFT Align (List).
+                                            // 3. If 1 logical line -> Default CENTER Align (Block Label).
+
+                                            const logicalLines = textContent.split(/\r?\n/).map(l => l.trim()).filter(l => l);
+
+                                            let align = 'center';
+                                            let paddingLeft = 0;
+
+                                            // If we have multiple lines from the source, it's likely a list (Class Diagram)
+                                            if (logicalLines.length > 1) {
+                                                align = 'left';
+                                                paddingLeft = 5;
+                                            } else {
+                                                // Single line? Check for explicit Class syntax overrides
+                                                const hasMethodSyntax = /[+\-#]/.test(textContent) && textContent.includes('(');
+                                                if (hasMethodSyntax) {
+                                                    align = 'left';
+                                                    paddingLeft = 5;
+                                                }
+                                            }
+
+                                            const fontSize = 11;
+                                            const maxChars = Math.max(10, Math.floor(width / 7));
+
+                                            // Build final render lines (applying width-wrap to each logical line)
+                                            const finalRenderLines = [];
+
+                                            logicalLines.forEach(logicLine => {
+                                                const words = logicLine.split(/\s+/);
+                                                let currentLine = [];
+
+                                                words.forEach(word => {
+                                                    if ((currentLine.join(' ').length + word.length) > maxChars) {
+                                                        finalRenderLines.push(currentLine.join(' '));
+                                                        currentLine = [word];
+                                                    } else {
+                                                        currentLine.push(word);
+                                                    }
+                                                });
+                                                if (currentLine.length > 0) finalRenderLines.push(currentLine.join(' '));
+                                            });
+
+
+                                            // Create replacement text node
+                                            const textNode = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+
+                                            // Apply Alignment
+                                            if (align === 'left') {
+                                                textNode.setAttribute('x', x + paddingLeft);
+                                                textNode.setAttribute('text-anchor', 'start');
+                                            } else {
+                                                textNode.setAttribute('x', x + width / 2);
+                                                textNode.setAttribute('text-anchor', 'middle');
+                                            }
+
+                                            textNode.setAttribute('y', y + 14);
+                                            textNode.setAttribute('fill', '#000000');
+                                            textNode.setAttribute('font-family', 'Arial, sans-serif');
+                                            textNode.setAttribute('font-size', `${fontSize}px`);
+
+                                            // Force Opacity/Visibility
+                                            textNode.style.opacity = '1';
+                                            textNode.style.visibility = 'visible';
+
+                                            // Create tspan for each final line
+                                            finalRenderLines.forEach((line, i) => {
+                                                const tspan = document.createElementNS('http://www.w3.org/2000/svg', 'tspan');
+                                                if (align === 'left') {
+                                                    tspan.setAttribute('x', x + paddingLeft);
+                                                } else {
+                                                    tspan.setAttribute('x', x + width / 2);
+                                                }
+                                                tspan.setAttribute('dy', i === 0 ? '0' : '1.2em');
+                                                tspan.textContent = line;
+                                                textNode.appendChild(tspan);
+                                            });
+
+                                            // Replace foreignObject in the clone with textNode
+                                            cln.parentNode.replaceChild(textNode, cln);
+                                            return;
+                                        }
+                                    }
+                                }
+                                for (let c = 0; c < orig.childNodes.length; c++) {
+                                    if (c < cln.childNodes.length) {
+                                        inlineOnClone(orig.childNodes[c], cln.childNodes[c]);
+                                    }
+                                }
+                            };
+                            inlineOnClone(svg, svgClone);
+
+                            // Serialize the STYLED clone
+                            svgClone.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
+                            const serializer = new XMLSerializer();
+                            const svgString = serializer.serializeToString(svgClone);
+
+                            // 2. Render to Canvas via CANVG
+                            const canvas = document.createElement('canvas');
+                            const scale = 3;
+                            const rect = svg.getBoundingClientRect();
+                            if (rect.width === 0 || rect.height === 0) continue;
+
+                            canvas.width = rect.width * scale;
+                            canvas.height = rect.height * scale;
+
+                            const ctx = canvas.getContext('2d');
+                            ctx.scale(scale, scale);
+
+                            ctx.fillStyle = '#ffffff';
+                            ctx.fillRect(0, 0, canvas.width / scale, canvas.height / scale);
+
+                            const v = await canvg.Canvg.fromString(ctx, svgString, {
+                                ignoreMouse: true,
+                                ignoreAnimation: true,
+                                anonymousCrossOrigin: true
+                            });
+                            await v.render();
+
+                            const dataUrl = canvas.toDataURL('image/png');
+
+                            // 3. Inject
+                            const imgTag = document.createElement('img');
+                            imgTag.src = dataUrl;
+
+                            // CRITICAL for Word Export: Set EXPLICIT width/height attributes.
+                            // htmldocx/Word often ignores CSS '100%', causing the High-DPI image to look GIGANTIC.
+                            // We set the logical width (original SVG width) to force scaling down.
+                            imgTag.setAttribute('width', Math.round(rect.width));
+                            imgTag.setAttribute('height', Math.round(rect.height));
+
+                            imgTag.style.maxWidth = '100%';
+                            imgTag.style.height = 'auto';
+                            imgTag.style.display = 'block';
+                            imgTag.style.margin = '10px auto';
+
+                            target.innerHTML = '';
+                            target.appendChild(imgTag);
+                        }
+                    }
+                } catch (err) {
+                    console.error("Mermaid rasterization failed", err);
+                    // VISIBLE ERROR for PDF Debugging
+                    const errDiv = document.createElement('div');
+                    errDiv.style.color = 'red';
+                    errDiv.style.border = '2px solid red';
+                    errDiv.style.background = '#ffebee';
+                    errDiv.style.padding = '10px';
+                    errDiv.style.margin = '10px auto';
+                    errDiv.style.fontFamily = 'monospace';
+                    errDiv.innerText = `[MERMAID ERROR: ${err.message}]`;
+
+                    // Append to the TOP of the document so it's impossible to miss
+                    clone.body.insertBefore(errDiv, clone.body.firstChild);
+
+                    // ALSO replace the first mermaid div with this error if possible
+                    if (cloneMermaidDivs.length > 0) {
+                        try {
+                            const failTarget = cloneMermaidDivs[0];
+                            failTarget.innerHTML = '';
+                            failTarget.appendChild(errDiv.cloneNode(true));
+                        } catch (e) { console.error(e) }
+                    }
+                }
+            }
+
+            const html = clone.outerHTML;
 
             fetch(endpoint, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ html: html, filename: currentFilename.replace(/.md$/, '.' + ext) })
+                body: JSON.stringify({ html: html, filename: currentFilename.replace(/\.[^/.]+$/, '.' + ext) })
             })
                 .then(r => {
                     if (r.ok) return r.blob();
@@ -1209,7 +1634,7 @@
                     const url = window.URL.createObjectURL(blob);
                     const a = document.createElement('a');
                     a.href = url;
-                    a.download = currentFilename.replace(/.md$/, '.' + ext);
+                    a.download = currentFilename.replace(/\.[^/.]+$/, '.' + ext);
                     a.click();
                     btn.innerHTML = orig;
                 })

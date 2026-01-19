@@ -47,6 +47,10 @@ class Pipeline:
         """Allow iteration for backward compatibility if needed."""
         return iter(self._steps)
 
+    def __len__(self):
+        """Support len() for logging."""
+        return len(self._steps)
+
 class PluginRegistry:
     """
     Singleton Registry to hold all discovered plugin modules/features.
@@ -199,7 +203,7 @@ class FeatureManager:
                  if existing_idx >= 0:
                      # Update/Replace existing feature
                      self._features[existing_idx] = plugin
-                     logger.info(f"FeatureManager: Updated feature '{plugin.name}' (State: {plugin.state})")
+                     logger.warning(f"FeatureManager: Overwrote existing feature '{plugin.name}' (State: {plugin.state})")
                  else:
                     self._features.append(plugin)
                     count += 1
@@ -287,3 +291,11 @@ class FeatureManager:
                 pipeline.add_step(f.handler)
         
         return pipeline
+
+    def get_features_by_type(self, feature_type: FeatureType) -> List[Feature]:
+        """
+        Retrieve all features of a specific type.
+        """
+        features = [f for f in self._features if f.type == feature_type]
+        logger.debug(f"FeatureManager: Found {len(features)} features of type {feature_type}")
+        return features

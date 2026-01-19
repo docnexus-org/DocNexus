@@ -208,3 +208,30 @@
     font-weight: 600;
     cursor: pointer;
 }
+
+/* --- Mobile Optimization --- */
+@media (max-width: 768px) {
+    .extensions-header {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: var(--space-4);
+    }
+
+    .marketplace-controls {
+        width: 100%;
+        /* Full width search/sort */
+        flex-wrap: wrap;
+        /* Allow wrapping of filters */
+    }
+
+    .extensions-grid {
+        grid-template-columns: 1fr;
+        /* Single column */
+    }
+
+    .filter-btn {
+        flex: 1;
+        /* Chunky touch targets */
+        text-align: center;
+    }
+}

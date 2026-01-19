@@ -45,8 +45,8 @@ def test_api():
         with urllib.request.urlopen(VERSION_URL) as response:
             data = json.loads(response.read().decode())
             print(f"Version: {data['version']}")
-            if data['version'] == '1.2.4':
-                 print("SUCCESS: Version matches 1.2.4")
+            if data['version'] == '1.2.6':
+                 print("SUCCESS: Version matches 1.2.6")
             else:
                  print(f"FAILURE: Version mismatch: {data['version']}")
                  sys.exit(1)

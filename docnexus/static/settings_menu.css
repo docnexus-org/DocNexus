@@ -161,3 +161,24 @@
 .toggle-switch[data-value="left"] .toggle-slider {
     transform: translateX(0%);
 }
+
+/* --- Mobile Optimization --- */
+@media (max-width: 768px) {
+    .settings-menu {
+        position: fixed;
+        /* Detach from button flow */
+        top: 60px;
+        /* Below header */
+        right: 1rem;
+        left: 1rem;
+        /* Stretch */
+        width: auto;
+        max-width: none;
+        box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
+    }
+
+    .settings-item {
+        grid-template-columns: 1fr auto;
+        /* Force label space */
+    }
+}

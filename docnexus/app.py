@@ -43,6 +43,19 @@ except Exception:
 from docnexus.core.loader import load_plugins
 from docnexus.features.registry import PluginRegistry
 
+# Input Support Configuration
+try:
+    import mammoth
+    WORD_INPUT_AVAILABLE = True
+    def convert_docx_to_html(start_path):
+        with open(start_path, "rb") as docx_file:
+            result = mammoth.convert_to_html(docx_file)
+            return result.value
+except ImportError:
+    WORD_INPUT_AVAILABLE = False
+    def convert_docx_to_html(start_path):
+        raise ImportError("mammoth library not installed")
+
 import os
 
 # Standard Version Loading (Fail Fast)
@@ -78,6 +91,13 @@ def add_header(r):
     r.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
     r.headers["Pragma"] = "no-cache"
     r.headers["Expires"] = "0"
+    # Content Security Policy (Liberal for local app with heavy JS libs like Mermaid/KaTeX)
+    r.headers["Content-Security-Policy"] = (
+        "default-src 'self' 'unsafe-inline' 'unsafe-eval' data: blob: "
+        "https://fonts.googleapis.com https://fonts.gstatic.com "
+        "https://cdnjs.cloudflare.com https://cdn.jsdelivr.net "
+        "https://uicdn.toast.com;"
+    )
     return r
 
 # Global Feature Manager (initialized later)
@@ -320,7 +340,8 @@ LOG_DIR = BASE_DIR / 'logs'
 setup_logging(LOG_DIR, DEBUG_MODE)
 
 logger = logging.getLogger(__name__)
-logger.info(f"Application starting - Version {VERSION}")
+logger = logging.getLogger(__name__)
+logger.info(f"Application starting - Version {VERSION} | Debug Mode: {DEBUG_MODE}")
 
 # Initialize Plugins
 try:
@@ -349,6 +370,8 @@ try:
             if 'editor' not in [bp.name for bp in app.blueprints.values()]:
                 app.register_blueprint(editor_bp)
                 logger.info("Registered editor blueprint (fallback)")
+            else:
+                 logger.info("Editor blueprint already registered via registry.")
         except Exception as e:
             logger.warning(f"Fallback registration skipped: {e}")
             

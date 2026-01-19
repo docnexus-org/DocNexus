@@ -24,7 +24,7 @@ if __name__ == '__main__':
     print("="*60)
     print(f"\n  Server running at: http://localhost:8000")
     print(f"  Smart Conversion: Toggle in document view")
-    print(f"  Markdown Files: ./examples/ (Dev) or ./workspace/ (Prod)")
+    print(f"  Markdown Files: ./docs/examples/ (Dev) or ./workspace/ (Prod)")
     print(f"  Documentation: ./docs/")
     print(f"  Debug Mode: {'ON' if debug_mode else 'OFF'}")
     print(f"\n  Press Ctrl+C to stop the server\n")

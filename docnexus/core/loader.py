@@ -84,12 +84,12 @@ def load_plugins_from_path(plugin_dir: Path, registry_instance=None) -> None:
             plugin_path = item / PLUGIN_FILE_NAME
             # debug_log(f"Checking for {plugin_path}")
             if plugin_path.exists():
-                logger.error(f"DEBUG: Found plugin at {plugin_path}")
+                logger.debug(f"Found plugin at {plugin_path}")
                 load_single_plugin(item.name, plugin_path, registry_instance)
                 count += 1
             else:
                  pass
-    logger.error(f"DEBUG: Scanned {plugin_dir}, found {count} plugins.")
+    logger.debug(f"Scanned {plugin_dir}, found {count} plugins.")
 
 def load_single_plugin(name: str, path: Path, registry_instance=None) -> None:
     """
@@ -212,7 +212,7 @@ def load_plugins(registry_instance=None) -> None:
     Main entry point to discover and load all available plugins.
     """
     search_paths = get_plugin_paths()
-    logger.error(f"DEBUG: Loader search paths: {[str(p) for p in search_paths]}")
+    logger.debug(f"Loader search paths: {[str(p) for p in search_paths]}")
     
     for path in search_paths:
         logger.info(f"Loader: Scanning path: {path}")

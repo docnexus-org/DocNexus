@@ -2,6 +2,81 @@
 
 All notable changes to this project will be documented in this file.
 
+## [v1.2.5] - 2026-01-11
+
+### Added
+- **Mermaid Support**: Added native rendering for Mermaid diagrams (Sequence, Flowchart, Class) in the viewer (`view.html`) and backend logic (`renderer.py`).
+- **User Guide**: Added "Smart Diagrams" section to `USER_GUIDE.md` detailing how to use Mermaid.
+- **Documentation**: Enhanced `DOCNEXUS_ARCHITECTURE.md` with visual block and sequence diagrams.
+
+### Fixed
+- **Mermaid Logic**: Fixed syntax errors in architectural diagrams (subgraph IDs, HTML entities) that prevented rendering.
+- **Renderer Config**: Configured `pymdownx.superfences` to correctly output `<div class="mermaid">` for frontend detection.
+
+### Fixed (Hotfix)
+- **Mermaid Export Visibility**: Fixed critical issue where text in Block and Class diagrams was invisible in PDF exports due to `foreignObject` limitations in `canvg`. Implemented a dynamic "ForeignObject Shim" to convert these into native SVG text.
+- **Smart Text Alignment**: Implemented intelligent alignment logic that correctly centers Block Diagram labels while left-aligning Class Diagram attribute lists.
+- **Text Clarity**: Enforced `stroke: none` and high-contrast overrides to ensure clean, readable text in generated diagrams.
+- **Word Export Refined**: Fixed transparency issues (invisible diagrams) by flattening specific images onto a white background. Implemented intelligent width/height constraints to ensure diagrams never overflow the page.
+- **Stability**: Fixed indentation error in Word export plugin.
+
+### Refactor
+- **Project Structure**: Moved specific `examples` folder to `docs/examples` for better organization.
+- **Build Artifacts**: Removed legacy `dist` folder. Implemented unified `releases/archive` and `releases/latest` logic for better version management.
+
+### DevOps
+- **Build Metadata**: Added automatic injection of Build Timestamp (`YYYY-MM-DD HH:MM:SS`) and Build Type (`Dev`/`Release`) into the executable.
+- **CLI**: Updated `--version` output to display build metadata.
+- **Public Access**: Configured ALL builds (Dev & Release) to bind to `0.0.0.0` by default, enabling seamless access via Localhost AND Public/Global IP.
+
+### Improved
+- **PDF Export**:
+    - **Mermaid Support**: Added "True WYSIWYG" Mermaid export. The browser now captures high-resolution snapshots of rendered diagrams (clientside) and embeds them into the PDF, ensuring 100% offline reliability and exact visual fidelity.
+    - **Pro TOC**: Replaced web-style box with professional print-style Table of Contents (transparent, bold typography).
+    - **Clean Output**: Stripped web UI elements (Navbar, Sidebar, Buttons) using `#documentContent` targeting.
+    - **Flowcharts**:
+    ```plaintext
+    graph TD;
+      A[Start] --> B{Is it?};
+      B -- Yes --> C[OK];
+      B -- No --> D[Debug];
+    ```
+removed header artifacts (`¶`), and stripped unsupported emojis ("tofu").
+- **Sidebar**:
+    - **Flash Fix**: Eliminated "Flash of Unstyled Content" (FOUC) by applying TOC position preferences immediately before render.
+    - **Availability**: Sidebar is now available for all file types (including text files).
+    - **Shuffle**: Added "Swap Layout" button with sleek, ghosted double-arrow icon for premium look.
+    - **Sync**: Fixed TOC sync issues on Text/Docx files by expanding detection logic to include `H1` headers.
+
+### Fixed
+- **Stability**: Fixed `500 Internal Server Error` caused by missing `__len__` in `Pipeline` class.
+- **Word Preview**: Fixed crash (`500 Error`) when previewing `.docx` files by restoring missing `mammoth` configuration.
+- **PDF Export**: Fixed critical bug where PDF exports from Word documents were saved with incorrect `.docx` extension.
+- **Editor Plugin**: Fixed syntax typo to prevent import errors.
+- **Logging**: Unified log levels and added better tracing for loader and plugins.
+
+### Refinement
+- **Smart Page Breaks**:
+    - **PDF**: Relaxed pagination rules (`page-break-before` on H1 removed) to prevent blank pages while maintaining "Keep-with-Next" logic for headings.
+    - **Word**: Implemented robust "Keep-with-Next" for headings and "Keep-Together" for code blocks via post-processing to ensure professional document flow.
+- **Dynamic Diagrams**:
+    - **Theme-Aware**: Mermaid diagrams now listen to application theme changes and instantly re-render in the correct color scheme (Light/Dark).
+    - **Accessibility**: Enforced high-contrast colors (Slate 50 on Slate 800 for Dark Mode; Slate 900 on White for Light Mode) to ensure diagram readability.
+
+### Limitations
+- **Export**: Documented successful PDF/Word export limitations regarding dynamic diagrams (JS content) in `Todo`.
+
+## [v1.2.6] - 2026-01-15
+
+### Fixed (PDF Fidelity)
+- **Emoji Clipping**: Fixed persistent issue where emojis were clipped or invisible in PDF exports when inside paragraphs or lists. Implemented a comprehensive **Table Wrapper** strategy that automatically wraps block elements containing emojis in borderless tables to bypass `xhtml2pdf` clipping bugs.
+- **Emoji Rendering**: Switched to high-fidelity **32x32 PNG** generation for emojis using system fonts, replacing legacy font-based rendering which was prone to "blank box" issues.
+- **Robustness**: Created permanent integration test `tests/test_pdf_export_integration.py` to validate "Markdown -> HTML -> PDF" pipeline reliability.
+- **Word Footnotes**: Fixed critical layout and navigation issues.
+    - **Layout**: Footnote numbers now sit on the same line as the text (preventing "number on line 1, text on line 2" bug) by intelligently unwrapping paragraph tags within list items.
+    - **Hyperlinks**: Fixed broken "Jump to Footnote" and "Return to Text" links. Implemented a custom bookmark injection system that intercepts HTML anchors (`<a name="fn:1">`) and converts them into native Word bookmarks, sanitized for compatibility.
+    - **Stability**: Fixed a `KeyError: 'href'` crash in `htmldocx` by ensuring all injected anchors have valid attributes.
+
 ## [v1.2.4] - 2026-01-10
 ### Fixed
 - **Editor Plugin**: Fixed critical `Feature` signature mismatch that prevented the Editor from loading in the bundled release (added `state` and `feature_type` args).
