@@ -50,4 +50,5 @@ Missing Markdown Features (Audit & Roadmap):
 -> Remote Includes: `pymdownx.snippets` shows in code, but needs config to allow including URLs or relative paths effectively.
 
 Bugs (To Fix in Next Release):
+-> Alignment and spacing issue is there when containing Inline Emojis (due to table wrapping logic).
 -> Emoji size in Block sections is appearing a bit strecheds.

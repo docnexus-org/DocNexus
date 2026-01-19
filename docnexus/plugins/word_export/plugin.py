@@ -33,7 +33,9 @@ def add_bookmark(paragraph, bookmark_name):
     bookmark_end.set(qn('w:id'), str(hash(bookmark_name) % 10000))
     
     # Insert bookmark
-    paragraph._element.insert(0, bookmark_start)
+    # WARN: insert(0) puts it before pPr (properties), which creates INVALID XML that Word repairs by deleting.
+    # We must append it to the end of the element (after pPr and existing runs).
+    paragraph._element.append(bookmark_start)
     paragraph._element.append(bookmark_end)
 
 # Imports for SafeHtmlToDocx and export_to_word
@@ -108,6 +110,22 @@ class SafeHtmlToDocx(HtmlToDocx):
                     primary_font = fonts[0].strip().replace("'", "").replace('"', "")
                     self.run.font.name = primary_font
             except Exception: pass
+
+    def handle_starttag(self, tag, attrs):
+        # Override to intercept Named Anchors for Bookmarks
+        if tag == 'a':
+            attrs_dict = dict(attrs)
+            # Check for 'name' or 'id' that matches our Footnote pattern
+            bookmark_name = attrs_dict.get('name') or attrs_dict.get('id')
+            
+            if bookmark_name and (bookmark_name.startswith('fn_') or bookmark_name.startswith('fnref_')):
+                # We found a footnote anchor! Inject a Word Bookmark.
+                # Note: We need a paragraph to attach to. htmldocx usually manages self.paragraph.
+                if self.paragraph:
+                    # logger.info(f"Injecting Word Bookmark: {bookmark_name}")
+                    add_bookmark(self.paragraph, bookmark_name)
+                    
+        super().handle_starttag(tag, attrs)
 
     def add_styles_to_paragraph(self, style):
         # Override to support background-color (Shading) for Math Blocks
@@ -392,6 +410,80 @@ def transform_html_for_word(soup: BeautifulSoup):
 
     # 7. Transform Math currently handled by Image Generation Logic later
     # We purposefully skip it here to preserve the nodes for the Image Converter.
+
+    # 8. Transform Footnotes (Header + Styles + Hyperlinks)
+    footnote_div = soup.find('div', class_='footnote')
+    if footnote_div:
+        # A. Add Header
+        header = soup.new_tag('h3')
+        header.string = "Footnotes"
+        header['style'] = "margin-top: 24px; margin-bottom: 12px; border-bottom: 1px solid #cccccc; padding-bottom: 4px; text-align: left;"
+        footnote_div.insert_before(header)
+        
+        # B. Style Container
+        footnote_div['style'] = "font-size: 10pt; color: #4b5563; text-align: left;"
+        
+        # C. Fix Hyperlinks & Layout
+        # Word Bookmarks require <a name="...">. 
+        # Crucial: htmldocx often ignores empty anchors <a name="foo"></a>.
+        # Fix: Put a Zero-Width Space (&#8203;) inside target anchors.
+        # Fix: Merge 'name' into the existing link for references.
+        
+        # C1. Targets (The Footnote Definitions)
+        for li in footnote_div.find_all('li', id=True):
+            raw_id = li['id']
+            # We move the ID to the anchor to ensure htmldocx sees it as a bookmark target
+            del li['id'] 
+            safe_id = raw_id.replace(':', '_')
+            
+            # 1. Inject Anchor with Content (ZWS)
+            # Use both name and id to be safe
+            a_target = soup.new_tag('a')
+            a_target['name'] = safe_id
+            a_target['id'] = safe_id
+            # Fix KeyError: 'href' in htmldocx
+            # htmldocx assumes any <a> with content has an href.
+            a_target['href'] = '#' 
+            a_target.string = "\u200b" # Zero Width Space
+            li.insert(0, a_target)
+            
+            # 2. Update Backlink Href
+            backlink = li.find('a', class_='footnote-backref')
+            if backlink and backlink.get('href'):
+                 raw_href = backlink['href']
+                 safe_href = raw_href.replace(':', '_')
+                 backlink['href'] = safe_href
+            
+            # 3. Unwrap Paragraphs
+            for p in li.find_all('p'):
+                p.unwrap()
+                
+            # 4. Enforce Left Alignment
+            li['style'] = "text-align: left; margin-bottom: 4px;"
+
+        # C2. Sources (The References in Text)
+        for sup in soup.find_all('sup', id=re.compile(r'^fnref')):
+            raw_id = sup['id']
+            del sup['id']
+            safe_id = raw_id.replace(':', '_')
+            
+            # 1. Find existing link
+            a_link = sup.find('a', class_='footnote-ref')
+            if a_link:
+                # Merge bookmark identity into the link itself
+                a_link['name'] = safe_id
+                a_link['id'] = safe_id
+                
+                # Fix Forward Link Href
+                if a_link.get('href'):
+                     raw_href = a_link['href']
+                     safe_href = raw_href.replace(':', '_')
+                     a_link['href'] = safe_href
+            else:
+                 # Fallback if weird structure: inject anchor with ZWS?
+                 # Should not happen with standard markdown
+                 pass
+
 
 
 
@@ -715,8 +807,16 @@ def export_to_word(html_content: str) -> bytes:
                     img_tag['alt'] = tex
                     img_tag['class'] = 'docnexus-math-img' 
                     
-                    div_wrapper = soup.new_tag('div')
-                    div_wrapper['style'] = "text-align: center; margin: 12px 0;"
+                    div_wrapper = soup.new_tag('p')
+                    
+                    # ALIGNMENT FIX: Check if inside list
+                    is_inside_list = target_node.find_parent('li') is not None
+                    
+                    if is_inside_list:
+                         div_wrapper['style'] = "text-align: left; margin: 0;"
+                    else:
+                         div_wrapper['style'] = "text-align: center; margin: 12px 0;"
+                         
                     img_tag['style'] = "max-width: 100%;"
                     div_wrapper.append(img_tag)
                     replacement = div_wrapper
@@ -780,8 +880,16 @@ def export_to_word(html_content: str) -> bytes:
                      img_tag['alt'] = tex
                      img_tag['class'] = 'docnexus-math-img'
                      
-                     div_wrapper = soup.new_tag('div')
-                     div_wrapper['style'] = "text-align: center; margin: 12px 0;"
+                     div_wrapper = soup.new_tag('p')
+                     
+                     # ALIGNMENT FIX: Check if inside list
+                     is_inside_list = node.find_parent('li') is not None
+                     
+                     if is_inside_list:
+                          div_wrapper['style'] = "text-align: left; margin: 0;"
+                     else:
+                          div_wrapper['style'] = "text-align: center; margin: 12px 0;"
+                          
                      img_tag['style'] = "max-width: 100%;"
                      div_wrapper.append(img_tag)
                      replacement = div_wrapper

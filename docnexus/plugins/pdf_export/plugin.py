@@ -910,10 +910,22 @@ def transform_html_for_pdf(soup: BeautifulSoup):
                     
                     if is_display:
                         # Block Math
-                        table = factory_soup.new_tag('table', attrs={'width': '100%', 'border': '0'})
-                        tr = factory_soup.new_tag('tr')
-                        td = factory_soup.new_tag('td', attrs={'align': 'center', 'valign': 'middle'})
-                        img_tag['style'] = "width: 60%;" 
+                        # Check context: Inside List?
+                        is_inside_list = target_node.find_parent('li') is not None
+                        
+                        if is_inside_list:
+                            # Left Align in Lists to preserve bullet flow
+                            table = factory_soup.new_tag('table', attrs={'border': '0'}) # auto width
+                            tr = factory_soup.new_tag('tr')
+                            td = factory_soup.new_tag('td', attrs={'align': 'left', 'valign': 'middle'})
+                            img_tag['style'] = "max-width: 90%;" # reduce max width slightly
+                        else:
+                            # Center Align in Main Body
+                            table = factory_soup.new_tag('table', attrs={'width': '100%', 'border': '0'})
+                            tr = factory_soup.new_tag('tr')
+                            td = factory_soup.new_tag('td', attrs={'align': 'center', 'valign': 'middle'})
+                            img_tag['style'] = "width: 60%;" 
+                            
                         td.append(img_tag)
                         tr.append(td)
                         table.append(tr)
@@ -976,11 +988,26 @@ def transform_html_for_pdf(soup: BeautifulSoup):
                     # Styling
                     if is_display:
                         # Block Math
-                        div_wrapper = factory_soup.new_tag('div')
-                        div_wrapper['style'] = "text-align: center; margin: 10px 0;"
-                        img_tag['style'] = "max-width: 100%;" # avoid overflow
-                        div_wrapper.append(img_tag)
-                        script.replace_with(div_wrapper)
+                        # Block Math
+                        is_inside_list = script.find_parent('li') is not None
+                        
+                        if is_inside_list:
+                            # Left Align in Lists
+                            table = factory_soup.new_tag('table', attrs={'border': '0'})
+                            tr = factory_soup.new_tag('tr')
+                            td = factory_soup.new_tag('td', attrs={'align': 'left', 'valign': 'middle'})
+                            img_tag['style'] = "max-width: 90%;"
+                        else:
+                            # Center Align in Main Body
+                            table = factory_soup.new_tag('table', attrs={'width': '100%', 'border': '0'})
+                            tr = factory_soup.new_tag('tr')
+                            td = factory_soup.new_tag('td', attrs={'align': 'center', 'valign': 'middle'})
+                            img_tag['style'] = "width: 60%;" 
+
+                        td.append(img_tag)
+                        tr.append(td)
+                        table.append(tr)
+                        script.replace_with(table)
                     else:
                         # INLINE MATH: Text
                         replacement = parse_tex_to_html(factory_soup, tex)

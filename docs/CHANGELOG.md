@@ -72,6 +72,10 @@ removed header artifacts (`¶`), and stripped unsupported emojis ("tofu").
 - **Emoji Clipping**: Fixed persistent issue where emojis were clipped or invisible in PDF exports when inside paragraphs or lists. Implemented a comprehensive **Table Wrapper** strategy that automatically wraps block elements containing emojis in borderless tables to bypass `xhtml2pdf` clipping bugs.
 - **Emoji Rendering**: Switched to high-fidelity **32x32 PNG** generation for emojis using system fonts, replacing legacy font-based rendering which was prone to "blank box" issues.
 - **Robustness**: Created permanent integration test `tests/test_pdf_export_integration.py` to validate "Markdown -> HTML -> PDF" pipeline reliability.
+- **Word Footnotes**: Fixed critical layout and navigation issues.
+    - **Layout**: Footnote numbers now sit on the same line as the text (preventing "number on line 1, text on line 2" bug) by intelligently unwrapping paragraph tags within list items.
+    - **Hyperlinks**: Fixed broken "Jump to Footnote" and "Return to Text" links. Implemented a custom bookmark injection system that intercepts HTML anchors (`<a name="fn:1">`) and converts them into native Word bookmarks, sanitized for compatibility.
+    - **Stability**: Fixed a `KeyError: 'href'` crash in `htmldocx` by ensuring all injected anchors have valid attributes.
 
 ## [v1.2.4] - 2026-01-10
 ### Fixed
