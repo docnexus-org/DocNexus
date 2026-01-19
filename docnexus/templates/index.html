@@ -439,7 +439,7 @@
             </button>
 
             <form id="previewForm" action="/preview" method="POST" enctype="multipart/form-data" style="display:none;">
-                <input type="file" name="file" id="fileInput" accept=".md,.markdown,.docx,.txt"
+                <input type="file" name="file" id="fileInput" accept=".md,.markdown,.docx,.txt,.pdf"
                     onchange="document.getElementById('previewForm').submit()">
             </form>
 
@@ -516,6 +516,8 @@
                     <i class="fab fa-markdown"></i>
                     {% elif file.type == 'docx' %}
                     <i class="fas fa-file-word"></i>
+                    {% elif file.type == 'pdf' %}
+                    <i class="fas fa-file-pdf"></i>
                     {% else %}
                     <i class="fas fa-file-alt"></i>
                     {% endif %}

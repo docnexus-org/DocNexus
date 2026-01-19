@@ -8,6 +8,8 @@ import platform
 from pathlib import Path
 
 # --- Configuration ---
+from compile_requirements import compile_requirements
+
 PROJECT_ROOT = Path(__file__).parent.parent.resolve()
 BUILD_DIR = PROJECT_ROOT / "build"
 OUTPUT_DIR = BUILD_DIR / "output"
@@ -111,6 +113,11 @@ def setup():
         subprocess.check_call([sys.executable, "-m", "venv", str(VENV_DIR)], stdout=LOG_FILE_HANDLE, stderr=LOG_FILE_HANDLE)
     else:
         log("Venv already exists.", Colors.OKGREEN)
+
+    # 1.5 Compile Requirements
+    log("Compiling requirements...", Colors.OKBLUE)
+    compile_requirements()
+
 
     # 2. Install Deps
     log("Installing dependencies...")

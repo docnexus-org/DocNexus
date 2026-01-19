@@ -40,6 +40,32 @@ Do NOT assume the export library supports your CSS.
 | **Highlights** | `<mark>` | Map `bg-color` to `WD_COLOR` Highlight enum. | Supports `background-color` natively. |
 | **Icons** | CSS `::before` (Mask) | Hard replace with Emoji text (ℹ️) in HTML transform. | **Base64 Images**: Text Emojis fail in PDF. We inject `<img>` with Base64 PNGs. |
 
+## Advanced Rendering Strategies (v1.2.6+)
+
+### 1. PDF: The Table Wrapper Strategy (Emoji Fix)
+**Problem**: The `xhtml2pdf` engine uses a legacy layout implementation that clips text containing emojis when they appear inside standard block elements (`<p>`, `<div>`, `<li>`), especially if `line-height` is tight.
+**Solution**: We implemented a **Table Wrapper** strategy.
+-   **Mechanism**: A pre-processing step wraps any block element containing emojis into a borderless, 1x1 table.
+-   **Why it works**: Tables in `xhtml2pdf` trigger a different layout calculation mode that respects container boundaries more strictly, preventing the clipping overflow.
+-   **Trade-off**: Slightly increased DOM complexity, but effectively invisible to the end user.
+
+### 2. Word: Advanced Navigation (Footnotes)
+**Problem**: `htmldocx` does not natively support the internal linking required for Footnotes (jumping from `fnref:1` to `fn:1` and back). It preserves the `href` but fails to create the *target* bookmark.
+**Solution**: Custom OXML Injection.
+-   **Mechanism**: We override `handle_starttag` to intercept named anchors (`<a name="fn:1">`).
+-   **Injection**: We explicitly inject `w:bookmarkStart` and `w:bookmarkEnd` nodes into the `python-docx` paragraph object.
+-   **Sanitization**: Bookmark names must be alphanumeric. We hash/sanitize IDs (e.g. `fn:1` -> `fn_1`) to ensure Word accepts them.
+
+### 3. Mermaid: Browser Snapshotting (WYSIWYG)
+**Problem**: Converting Mermaid.js (SVG) to PDF server-side is fragile. `canvg` (JS canvas rasterizer) fails on complex text, opacity, and foreignObjects.
+**Solution**: Browser-as-Renderer.
+-   **Mechanism**:
+    1.  The User Interface renders the diagram perfectly using the browser's SVG engine.
+    2.  Before export, a script captures this logical SVG and draws it to a high-resolution HTML5 Canvas.
+    3.  The canvas is converted to a Base64 PNG.
+    4.  We swap the live `<svg>` with this static `<img>` in the DOM clone sent to the server.
+-   **Result**: The PDF generator (`xhtml2pdf`) sees a simple Image, ensuring 100% visual fidelity with what the user saw on screen.
+
 ## Troubleshooting Word Export
 -   **Missing Colors**: `htmldocx` ignores most `background-color`. Use `SafeHtmlToDocx` overrides to inject `w:shd`.
 -   **Missing Icons**: Word doesn't support CSS masks. Use Emojis in the text transformation.

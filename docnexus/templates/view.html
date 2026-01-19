@@ -986,7 +986,7 @@
                 {% endif %}
                 {% endif %}
 
-                <!-- Export -->
+                <!-- Export Menu (Universal) -->
                 <div class="export-dropdown">
                     <button class="btn-icon" id="exportBtn" onclick="toggleExportMenu()" title="Export Options">
                         <i class="fas fa-download"></i>
@@ -1017,7 +1017,6 @@
     </nav>
 
     <!-- Main Content -->
-    <!-- Main Content -->
     <div class="main-container">
         <script>
             // Anti-FOUC: Apply TOC position immediately
@@ -1043,34 +1042,41 @@
                 <div class="document-header">
                     <div>
                         <h1 class="document-title">{{ file.name }}</h1>
-                        <div class="document-path">
-                            <i class="fas fa-file-alt"></i> {{ file.filename }} &nbsp;|&nbsp;
-                            <i class="fas fa-hdd"></i> {{ file.size }} &nbsp;|&nbsp;
-                            <i class="fas fa-clock"></i> {{ file.modified }}
-                        </div>
+                        <div class="file-name">
+                            {% if file.type == 'pdf' %}
+                            <i class="fas fa-file-pdf"></i>
+                            {% elif file.filename.endswith('.docx') %}
+                            <i class="fas fa-file-word"></i>
+                            {% else %}
+                            <i class="fas fa-file-alt"></i>
+                            {% endif %}
+                            {{ file.filename }} &nbsp;|&nbsp;
+                        </div> <i class="fas fa-hdd"></i> {{ file.size }} &nbsp;|&nbsp;
+                        <i class="fas fa-clock"></i> {{ file.modified }}
                     </div>
                 </div>
-
-                {% if file.toc %}
-                <div class="toc-container">
-                    <div class="toc-header">
-                        <i class="fas fa-list-ul"></i> Table of Contents
-                    </div>
-                    <div class="toc-content">
-                        {{ file.toc | safe }}
-                    </div>
-                </div>
-                {% endif %}
-
-                <div class="markdown-content">
-                    {{ file.content | safe }}
-                </div>
-
-                <!-- Slot: CONTENT_END -->
-                {% for slot_html in get_slots('CONTENT_END') %}
-                {{ slot_html|safe }}
-                {% endfor %}
             </div>
+
+            {% if file.toc %}
+            <div class="toc-container">
+                <div class="toc-header">
+                    <i class="fas fa-list-ul"></i> Table of Contents
+                </div>
+                <div class="toc-content">
+                    {{ file.toc | safe }}
+                </div>
+            </div>
+            {% endif %}
+
+            <div class="markdown-content">
+                {{ file.content | safe }}
+            </div>
+
+            <!-- Slot: CONTENT_END -->
+            {% for slot_html in get_slots('CONTENT_END') %}
+            {{ slot_html|safe }}
+            {% endfor %}
+
 
             <!-- Editor Section (Initially Hidden) -->
             <div id="editor-section" style="display: none;">
@@ -1078,7 +1084,6 @@
             </div>
         </main>
 
-        <!-- Sidebar ToC -->
         <!-- Sidebar ToC -->
         <aside class="toc-sidebar">
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
@@ -1319,11 +1324,26 @@
         // Settings and TOC are now handled by theme.js
 
         function exportToPDF() {
-            performExport('/api/export/pdf', 'pdf');
+            if (currentFileType === 'pdf') {
+                // Direct Download for PDF -> PDF
+                const link = document.createElement('a');
+                link.href = `/raw/${currentFilePath}`;
+                link.download = currentFilename;
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+            } else {
+                performExport('/api/export/pdf', 'pdf');
+            }
         }
 
         function exportToWord() {
-            performExport('/api/export/docx', 'docx');
+            if (currentFileType === 'pdf') {
+                alert('PDF to Word conversion is not yet installed.');
+                // Ideally trigger a plugin check or show a modal
+            } else {
+                performExport('/api/export/docx', 'docx');
+            }
         }
 
         async function performExport(endpoint, ext) {

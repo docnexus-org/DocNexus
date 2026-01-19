@@ -78,7 +78,7 @@ To save, press ++ctrl+s++ or ++cmd+s++.
 
 ### 2.6 Highlights & formatting
 - Mark: ==Highlighted Text==
-- Insert: ++Inserted Text++
+- Insert: {++Inserted Text++}
 - Delete: ~~Strikethrough~~
 - Subscript: H~2~O
 - Superscript: X^2^

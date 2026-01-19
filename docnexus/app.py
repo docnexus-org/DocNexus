@@ -443,7 +443,7 @@ def save_config(config):
 CONFIG = load_config()
 MD_FOLDER = Path(CONFIG['active_workspace'])  # Folder containing documents
 DOCS_FOLDER = PROJECT_ROOT / 'docs'  # Documentation folder
-ALLOWED_EXTENSIONS = {'.md', '.markdown', '.txt', '.docx'}
+ALLOWED_EXTENSIONS = {'.md', '.markdown', '.txt', '.docx', '.pdf'}
 
 # File size limits (in bytes)
 MAX_FILE_SIZE = 20 * 1024 * 1024  # 20 MB for actual file content
@@ -1228,6 +1228,25 @@ def debug_info():
         'config': CONFIG
     })
 
+@app.route('/raw/<path:filename>')
+def serve_raw_file(filename):
+    """Serve a raw file from the workspace (for PDF embedding etc)."""
+    # Security: Ensure we are inside MD_FOLDER
+    try:
+        file_path = (MD_FOLDER / filename).resolve()
+        # Security check to prevent path traversal
+        # pathlib .resolve() handles '..' but we must ensure it starts with MD_FOLDER
+        if not str(file_path).startswith(str(MD_FOLDER.resolve())):
+             abort(403, description="Access outside workspace denied")
+             
+        if not file_path.exists():
+            abort(404)
+            
+        return send_from_directory(MD_FOLDER, filename)
+    except Exception as e:
+        logger.error(f"Error serving raw file {filename}: {e}")
+        abort(404)
+
 @app.route('/file/<path:filename>')
 def view_file(filename):
     """View a specific markdown file."""
@@ -1259,6 +1278,26 @@ def view_file(filename):
     if not file_path or not file_path.exists():
         abort(404)
     
+    # Handle PDF Files (Native Embedding)
+    if file_path.suffix.lower() == '.pdf':
+        stat = file_path.stat()
+        file_info = {
+            'name': file_path.stem,
+            'filename': file_path.name,
+            'relative_path': str(file_path.relative_to(MD_FOLDER)),
+            'content': f'''
+                <div class="pdf-container" style="height: calc(100vh - 140px); width: 100%; overflow: hidden; border-radius: 8px; border: 1px solid var(--border-color);">
+                    <iframe src="/raw/{str(file_path.relative_to(MD_FOLDER)).replace('\\', '/')}" width="100%" height="100%" style="border:none;">
+                    </iframe>
+                </div>
+            ''',
+            'toc': "", # PDFs handle their own TOC usually
+            'modified': datetime.fromtimestamp(stat.st_mtime).strftime('%Y-%m-%d %H:%M:%S'),
+            'size': f"{stat.st_size / 1024:.2f} KB",
+            'type': 'pdf'
+        }
+        return render_template('view.html', file=file_info, version=VERSION)
+
     # Convert to HTML via feature pipeline (baseline + optional experimental)
     html_content, toc_content = render_document_from_file(file_path, enable_experimental=enable_experimental)
     stat = file_path.stat()
@@ -1383,6 +1422,48 @@ def preview_file():
                     "filename": filename
                 }, 500
         
+        # Handle PDF Files (Bypass Text Decoding)
+        if filename.lower().endswith('.pdf'):
+            try:
+                # Save to temp
+                temp_dir = Path(app.config['UPLOAD_FOLDER']) / 'temp'
+                temp_dir.mkdir(parents=True, exist_ok=True)
+                temp_filename = secure_filename(filename)
+                temp_path = temp_dir / temp_filename
+                file.save(temp_path)
+                
+                # Register for cleanup (handled by session/OS mostly, but good to note)
+                session['preview_filename'] = filename
+                
+                # Construct file info mimicking view_file
+                file_info = {
+                    'name': Path(filename).stem,
+                    'filename': filename,
+                    'relative_path': f"temp/{temp_filename}", # Virtual path
+                    'content': f'''
+                        <div class="pdf-container" style="height: calc(100vh - 190px); width: 100%; overflow: hidden; border-radius: 8px; border: 1px solid var(--border-color);">
+                            <!-- Use a route that serves from temp or raw if confirmed -->
+                            <!-- For preview, we might need a specific temp route or just serve_raw if we move it to MD_FOLDER temporarily -->
+                            <!-- CURRENTLY: Preview uploads shouldn't go to MD_FOLDER until Saved. -->
+                            <!-- We need a route to serve temp/preview files. -->
+                            <div style="padding: 2rem; text-align: center; color: var(--text-muted);">
+                                <i class="fas fa-file-pdf" style="font-size: 3rem; margin-bottom: 1rem;"></i>
+                                <p>PDF Preview is available after saving.</p>
+                                <p style="font-size: 0.8rem;">To view this PDF, please save it to your workspace.</p>
+                            </div>
+                        </div>
+                    ''',
+                    'toc': "",
+                    'modified': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+                    'size': f"{temp_path.stat().st_size / 1024:.2f} KB",
+                    'type': 'pdf',
+                    'preview_mode': True
+                }
+                return render_template('view.html', file=file_info, version=VERSION)
+            except Exception as e:
+                logger.error(f"Error handling PDF preview: {e}")
+                return {"error": "PDF Preview Failed", "message": str(e)}, 500
+
         # Handle text/markdown files
         try:
             content = file.read().decode('utf-8')
@@ -1759,6 +1840,8 @@ def search_files():
         
         # Only search text-based files
         if file_path and file_path.suffix.lower() in ['.md', '.txt', '.markdown']:
+            # Explicitly exclude .pdf/.docx (not indexable yet)
+
             try:
                 with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
                     content = f.read().lower()
