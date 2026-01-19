@@ -2,6 +2,11 @@
 
 All notable changes to this project will be documented in this file.
 
+## [v1.2.7] - Unreleased
+
+### Added
+- **None yet.**
+
 ## [v1.2.6] - 2026-01-15
 
 ### Fixed (PDF Fidelity)

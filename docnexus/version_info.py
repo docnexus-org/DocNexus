@@ -1,3 +1,3 @@
-__version__ = '1.2.6'
-__build_timestamp__ = '2026-01-19 09:55:45'
+__version__ = '1.2.7'
+__build_timestamp__ = 'Unknown'
 __build_type__ = 'Dev'
