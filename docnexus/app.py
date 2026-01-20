@@ -1288,9 +1288,9 @@ def view_file(filename):
             'filename': file_path.name,
             'relative_path': str(file_path.relative_to(MD_FOLDER)),
             'content': f'''
-                <div class="pdf-container" style="height: calc(100vh - 140px); width: 100%; overflow: hidden; border-radius: 8px; border: 1px solid var(--border-color);">
-                    <iframe src="/raw/{str(file_path.relative_to(MD_FOLDER)).replace('\\', '/')}" width="100%" height="100%" style="border:none;">
-                    </iframe>
+                <div class="pdf-container-placeholder" style="padding: 2rem; text-align: center; color: var(--text-muted);">
+                    <!-- PDF Rendering is handled by the PDF Editor Plugin via Slots -->
+                    <p>PDF Viewer is managed by extensions.</p>
                 </div>
             ''',
             'toc': "", # PDFs handle their own TOC usually

@@ -22,6 +22,11 @@
     <!-- Code Highlight Theme (Server-Side) -->
     <link rel="stylesheet" href="{{ url_for('static', filename='pygments.css') }}">
 
+    <!-- Slot: HEAD_SCRIPTS -->
+    {% for slot_html in get_slots('HEAD_SCRIPTS') %}
+    {{ slot_html|safe }}
+    {% endfor %}
+
     <!-- KaTeX -->
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/katex.min.css">
     <script src="https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/katex.min.js"></script>
@@ -1080,7 +1085,14 @@
 
             <!-- Editor Section (Initially Hidden) -->
             <div id="editor-section" style="display: none;">
-                <!-- Editor will be injected here -->
+                <!-- Default Markdown Editor Injected Here -->
+            </div>
+
+            <!-- Slot: EDITOR_CONTAINER (For Plugins like PDF, Image Editors) -->
+            <div id="plugin-editor-container" style="display: none;">
+                {% for slot_html in get_slots('EDITOR_CONTAINER') %}
+                {{ slot_html|safe }}
+                {% endfor %}
             </div>
         </main>
 
@@ -1194,8 +1206,26 @@
 
             if (editorSection.style.display === 'none') {
                 // SWITCH TO EDIT MODE
-                editorSection.style.display = 'block';
-                docContent.style.display = 'none';
+                // SWITCH TO EDIT MODE
+                if (currentFilename.toLowerCase().endsWith('.pdf')) {
+                    // PDF Editor Path
+                    const pluginContainer = document.getElementById('plugin-editor-container');
+                    if (pluginContainer && pluginContainer.children.length > 0) {
+                        pluginContainer.style.display = 'block';
+                        docContent.style.display = 'none';
+                        // Notify Plugin (if it exists)
+                        if (window.DocNexusPlugins && window.DocNexusPlugins.pdf && window.DocNexusPlugins.pdf.onEdit) {
+                            window.DocNexusPlugins.pdf.onEdit();
+                        }
+                    } else {
+                        alert('No PDF editor installed. Please check the Extensions Marketplace.');
+                        return; // Abort
+                    }
+                } else {
+                    // Standard Markdown Editor
+                    editorSection.style.display = 'block';
+                    docContent.style.display = 'none';
+                }
 
 
             } else {
@@ -1219,7 +1249,9 @@
                 `;
             docHeader.appendChild(controls);
 
-            loadDocumentSource();
+            if (!currentFilename.toLowerCase().endsWith('.pdf')) {
+                loadDocumentSource();
+            }
         }
 
         function cancelEdit() {
@@ -1233,7 +1265,9 @@
             if (controls) controls.remove();
 
             // Show Content
+            // Show Content
             editorSection.style.display = 'none';
+            document.getElementById('plugin-editor-container').style.display = 'none'; // Hide plugin container too
             docContent.style.display = 'block';
 
             // Show Edit Button
