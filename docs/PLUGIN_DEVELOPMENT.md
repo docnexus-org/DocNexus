@@ -150,29 +150,75 @@ def get_features():
 ```
 
 ### Editor Integration (`EDITOR_CONTAINER`)
-To replace the default Markdown editor with a custom interface (e.g., for PDF or Image editing), use the `EDITOR_CONTAINER` slot.
+To replace the default Markdown view with a custom interface (e.g., for PDF, Images, or CSVs), use the `EDITOR_CONTAINER` slot.
+
+**The "Unified View/Edit" Pattern:**
+Modern DocNexus plugins (v1.2.6+) use a single UI for both viewing and editing, initializing in a "Read-Only" state.
+
+1.  **Register Your Container**: Inject your hidden UI wrapper.
+2.  **Detect File Type**: Use `window.currentFilePath` to check if your plugin should activate.
+3.  **Takeover**: Hide the default markdown content but **keep the header**.
+4.  **Initialize**: Load your viewer.
 
 ```python
 def get_features():
-    _Registry = globals().get('PluginRegistry')
-    reg = _Registry()
+    reg = globals().get('PluginRegistry')()
     
-    # inject your Editor UI
+    # 1. Inject the Editor/Viewer UI (Hidden by default)
     editor_html = '''
-    <div id="my-custom-editor-ui" style="display:none; height:100%;">
-        <!-- Your Canvas/Toolbar here -->
-        <button onclick="window.DocNexusPlugins.myPlugin.save()">Save</button>
+    <div id="my-custom-editor-wrapper" style="width: 100%; height: 85vh; display: none;">
+        <div class="toolbar" id="my-toolbar" style="display:none;">
+            <button onclick="MyPlugin.save()">Save</button>
+        </div>
+        <div class="canvas" id="my-canvas"></div>
     </div>
+    
     <script>
-        // Register Global Hook
         window.DocNexusPlugins = window.DocNexusPlugins || {};
-        window.DocNexusPlugins.myPlugin = {
-            onEdit: function() {
-                // Called when 'Edit' is clicked for your file type
-                document.getElementById('my-custom-editor-ui').style.display = 'block';
-                // Initialize your editor...
+        
+        const MyPlugin = {
+            init: function(readOnly) {
+                // Logic to render content...
+                if (readOnly) document.getElementById('my-toolbar').style.display = 'none';
             },
             save: function() { ... }
+        };
+
+        // 2. Global Auto-Activation (The "Takeover")
+        document.addEventListener('DOMContentLoaded', () => {
+            // Contract: window.currentFilePath is guaranteed by view.html
+            const filePath = window.currentFilePath;
+            
+            if (filePath && filePath.endsWith('.myext')) {
+                // A. Hide Default Content (Preserve Header)
+                const mdContent = document.querySelector('.markdown-content');
+                if (mdContent) mdContent.style.display = 'none';
+                
+                const toc = document.querySelector('.toc-container');
+                if (toc) toc.style.display = 'none';
+
+                // B. Show My Container
+                const myContainer = document.getElementById('plugin-editor-container'); // Parent
+                const myWrapper = document.getElementById('my-custom-editor-wrapper'); // My UI
+                
+                if (myContainer) {
+                    myContainer.style.display = 'block';
+                    myContainer.style.width = '100%'; 
+                }
+                if (myWrapper) myWrapper.style.display = 'block';
+                
+                // C. Init in Read Mode
+                MyPlugin.init(true);
+            }
+        });
+
+        // 3. Edit Hook
+        window.DocNexusPlugins.myPlugin = {
+            onEdit: function() {
+                // User clicked global "Edit" button
+                document.getElementById('my-toolbar').style.display = 'flex';
+                // Switch to Edit Mode logic...
+            }
         };
     </script>
     '''
