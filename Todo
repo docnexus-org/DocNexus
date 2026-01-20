@@ -61,5 +61,6 @@ Universal Editor Makeover (Architecture Refactor):
 -> [Phase 2] Enhanced Plugin UI
    - [ ] Toolbar Slots: Allow plugins to inject buttons into the main header (Save/Cancel/Tools).
    - [ ] Keyboard Shortcuts: Unified registry for plugin hotkeys.
+   - [ ] Color Picker: Implement custom "Edge-style" color popover with curated colors and custom picker support.
 -> [Phase 3] Communication
    - [ ] Event Bus: Global `DocNexus.emit('FILE_SAVED')` for cross-plugin communication.
