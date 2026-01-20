@@ -149,6 +149,46 @@ def get_features():
     return [] # UI extensions often don't return a formal Feature object
 ```
 
+### Editor Integration (`EDITOR_CONTAINER`)
+To replace the default Markdown editor with a custom interface (e.g., for PDF or Image editing), use the `EDITOR_CONTAINER` slot.
+
+```python
+def get_features():
+    _Registry = globals().get('PluginRegistry')
+    reg = _Registry()
+    
+    # inject your Editor UI
+    editor_html = '''
+    <div id="my-custom-editor-ui" style="display:none; height:100%;">
+        <!-- Your Canvas/Toolbar here -->
+        <button onclick="window.DocNexusPlugins.myPlugin.save()">Save</button>
+    </div>
+    <script>
+        // Register Global Hook
+        window.DocNexusPlugins = window.DocNexusPlugins || {};
+        window.DocNexusPlugins.myPlugin = {
+            onEdit: function() {
+                // Called when 'Edit' is clicked for your file type
+                document.getElementById('my-custom-editor-ui').style.display = 'block';
+                // Initialize your editor...
+            },
+            save: function() { ... }
+        };
+    </script>
+    '''
+    reg.register_slot('EDITOR_CONTAINER', editor_html)
+    
+    return []
+```
+
+### Loading Scripts (`HEAD_SCRIPTS`)
+To load external libraries (like `pdf-lib` or `d3.js`), use the `HEAD_SCRIPTS` slot. This ensures they are available before your UI renders.
+
+```python
+reg.register_slot('HEAD_SCRIPTS', '<script src="/static/plugins/my_plugin/lib.js"></script>')
+```
+```
+
 ### Export Handler (`EXPORT_HANDLER`)
 Handles conversion of document content.
 - **Handler Signature**: `def handler(content_html: str, output_path: str, meta: dict) -> bool`
@@ -177,6 +217,24 @@ If bundling your plugin with the DocNexus Executable (PyInstaller), you must ens
 
 ### 6.1 Hidden Imports
 In `scripts/build.py`, explicitly add your plugin's dependencies to the `hidden_imports` list.
+
+## 6.5 The "Strict Install" Check (Lifecycle & Hydration)
+Crucially, just defining a `UI_EXTENSION` feature does **not** mean it will appear in the app. DocNexus performs a **Strict Hydration** step:
+
+1.  **Loader**: Scans plugin folder. If new, it checks `preinstalled` metadata.
+    - If `preinstalled=False`, it marks the plugin as **DISABLED** in `plugins.json`.
+2.  **FeatureManager**: Only hydrates slots for plugins explicitly enabled in `plugins.json`.
+
+**Implication for Developers:**
+If you set `preinstalled=False` (recommended for marketplace extensions), you **must** manually enable your plugin during development:
+1.  Run the app once (this auto-generates `plugins.json` entry as false).
+2.  Stop the app.
+3.  Edit `plugins.json` and add your plugin ID to the `installed` list.
+   ```json
+   { "installed": [ ..., "my_plugin" ] }
+   ```
+4.  Restart the app.
+
 
 ```python
 # scripts/build.py
@@ -285,4 +343,9 @@ When DocNexus is built as an EXE explanation (PyInstaller), your plugin's depend
 - [ ] Add to `requirements.txt`
 - [ ] Add to `hidden_imports` in `scripts/build.py`
 - [ ] Re-run `make build` to verify inclusion in the EXE.
+
+
+## 11. Core API Updates (v1.2.7)
+- **`get_markdown_files` renamed to `get_document_files`**: If your plugin listing files, use the new name. `get_markdown_files` is deprecated.
+- **Universal Editor Slots**: `EDITOR_CONTAINER` and `HEAD_SCRIPTS` are now available in `view.html`.
 

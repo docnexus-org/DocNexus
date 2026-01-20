@@ -152,6 +152,7 @@ sequenceDiagram
         FM->>Reg: get_all_plugins()
         FM->>FM: Flatten Plugins -> List[Feature]
         FM->>FM: Apply Priority Overrides
+        FM->>FM: hydrate_ui_slots() (Strict Check)
         FM->>App: Ready (Features Loaded)
     end
     

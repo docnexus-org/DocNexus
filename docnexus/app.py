@@ -159,37 +159,39 @@ def get_plugins():
                 icon = "fa-plug"
                 preinstalled = False
                 
-                # Robust Regex Metadata Extraction
+                # Robust AST Metadata Extraction
                 try:
-                    import re
-                    import ast
-                    
                     plugin_file_path = item / 'plugin.py'
                     with open(plugin_file_path, 'r', encoding='utf-8') as f:
-                        content = f.read()
-                        
-                    # Regex to find PLUGIN_METADATA = { ... }
-                    # Matches keys and values broadly, expecting valid python dict syntax
-                    match = re.search(r'PLUGIN_METADATA\s*=\s*({[^}]+})', content, re.DOTALL)
+                        source_code = f.read()
+
+                    # Parse the file structure without executing
+                    tree = ast.parse(source_code)
                     
-                    if match:
-                        dict_str = match.group(1)
-                        # clean up any potential trailing commas or comments if simple regex captured them?
-                        # actually ast.literal_eval is strict.
-                        # If regex is too greedy, it might fail.
-                        # Let's try to parse the match.
-                        meta = ast.literal_eval(dict_str)
-                        
-                        display_name = meta.get('name', display_name)
-                        desc = meta.get('description', desc)
-                        category = meta.get('category', category)
-                        icon = meta.get('icon', icon)
-                        preinstalled = meta.get('preinstalled', False)
-                    else:
+                    found_meta = False
+                    for node in tree.body:
+                        # Look for PLUGIN_METADATA = { ... }
+                        if isinstance(node, ast.Assign):
+                            for target in node.targets:
+                                if isinstance(target, ast.Name) and target.id == 'PLUGIN_METADATA':
+                                    if isinstance(node.value, ast.Dict):
+                                        # Safe literal eval of the dict node
+                                        meta = ast.literal_eval(node.value)
+                                        found_meta = True
+                                        
+                                        display_name = meta.get('name', display_name)
+                                        desc = meta.get('description', desc)
+                                        category = meta.get('category', category)
+                                        icon = meta.get('icon', icon)
+                                        preinstalled = meta.get('preinstalled', False)
+                                        break
+                            if found_meta: break
+                    
+                    if not found_meta:
                         logger.warning(f"No PLUGIN_METADATA found in {plugin_id}")
-                        
+
                 except Exception as e:
-                    logger.warning(f"Failed to regex-parse metadata for {plugin_id}: {e}")
+                    logger.warning(f"Failed to AST-parse metadata for {plugin_id}: {e}")
                 
                 # Determine Installed Status
                 if preinstalled:
@@ -199,8 +201,8 @@ def get_plugins():
                     is_installed = plugin_id in installed_ids
                     has_installer = True # Can be managed
 
-                if plugin_id == 'pdf_export':
-                     logger.info(f"API: get_plugins found pdf_export. State says installed={is_installed} (Instance {id(state)})")
+                if plugin_id in ['pdf_export', 'pdf_editor']:
+                     logger.info(f"API: get_plugins found {plugin_id}. State says installed={is_installed} (Preinstalled={preinstalled})")
                 # Priority (Config read)
                 priority_list = CONFIG.get('plugin_priority', [])
                 is_priority = plugin_id in priority_list
@@ -250,6 +252,8 @@ def install_plugin_api(plugin_id):
                 if found_path:
                     load_single_plugin(plugin_id, found_path, PluginRegistry())
                     FEATURES.refresh()
+                    # Re-hydrate UI slots (clears old, adds new)
+                    FEATURES.register_ui_slots()
                     logger.info(f"API: Reloaded plugin {plugin_id} and refreshed features.")
                 else:
                     logger.warning(f"API: Could not find path for {plugin_id} to reload.")
@@ -279,6 +283,8 @@ def uninstall_plugin_api(plugin_id):
             # 2. Refresh Features (Refresh will see State=False and disable feature)
             try:
                 FEATURES.refresh()
+                # Re-hydrate UI slots (removes uninstalled plugin's slots)
+                FEATURES.register_ui_slots()
                 logger.info(f"API: Refreshed features (Plugin {plugin_id} should be disabled).")
             except Exception as ref_err:
                 logger.error(f"API: Refresh failed: {ref_err}")
@@ -388,6 +394,8 @@ try:
         
         logger.info("Refreshing global FEATURES manager...")
         FEATURES.refresh()
+        # Hydrate UI Slots (Strict Install Check)
+        FEATURES.register_ui_slots()
     except Exception as fm_err:
         logger.error(f"Failed to initialize FeatureManager: {fm_err}", exc_info=True)
 
@@ -1443,7 +1451,7 @@ def preview_file():
                     'filename': filename,
                     'relative_path': f".temp/{temp_filename}", # Virtual path
                     'content': f'''
-                        <div class="pdf-container" style="height: calc(100vh - 190px); width: 100%; overflow: hidden; border-radius: 8px; border: 1px solid var(--border-color);">
+                        <div class="pdf-container pdf-container-placeholder" style="height: calc(100vh - 190px); width: 100%; overflow: hidden; border-radius: 8px; border: 1px solid var(--border-color);">
                              <iframe src="/raw/.temp/{temp_filename}" width="100%" height="100%" style="border:none;">
                             </iframe>
                         </div>

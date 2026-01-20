@@ -21,6 +21,10 @@ We are now focusing on enriching the default experience and handling technical d
         *   **ASCII to Table**: Convert ASCII art tables to Markdown tables.
         *   **SIP Signaling**: Convert text-based flows to Mermaid sequence diagrams.
         *   **Network Topology**: Convert text description to node diagrams.
+    *   **Universal Editor (In Progress)**:
+        *   **Slots**: Decouple the editor UI. Support `EDITOR_CONTAINER` injection for PDF/Image editing.
+        *   **PDF Editing**: Native-like PDF manipulation using `pdf-lib` via the new slot architecture.
+        *   **Toolbar API**: Future API for plugins to register buttons (Save, Undo, Tools) in the main header.
 
 ## 🛠 Phase 3: The Pipeline Architecture (Inspired by UnifiedJS)
 We will transition from monolithic rendering to a `Middleware` pipeline pattern, treating documents as data streams.

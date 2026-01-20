@@ -1,6 +1,7 @@
 {
     "installed": [
         "editor",
-        "word_export"
+        "word_export",
+        "pdf_editor"
     ]
 }

@@ -87,6 +87,11 @@ class PluginRegistry:
         self._custom_slots[slot_name].append(content)
         logger.debug(f"Registered content for slot: {slot_name}")
 
+    def clear_slots(self):
+        """Clear all registered UI slots."""
+        self._custom_slots = {}
+
+
     def get_slots(self, slot_name: str) -> List[str]:
         """
         Retrieve all content registered for a specific slot.
@@ -299,3 +304,41 @@ class FeatureManager:
         features = [f for f in self._features if f.type == feature_type]
         logger.debug(f"FeatureManager: Found {len(features)} features of type {feature_type}")
         return features
+
+    def register_ui_slots(self):
+        """
+        Hydrate the PluginRegistry slots with content from loaded UI_EXTENSION features.
+        Must be called after refresh().
+        """
+        logger.info("FeatureManager: Hydrating UI slots from features...")
+        count = 0
+        if not self._registry:
+            logger.warning("FeatureManager: No registry to register slots to.")
+            return
+
+        # Clear existing slots to prevent duplication/stale data
+        self._registry.clear_slots()
+
+        for f in self._features:
+
+            # Check type
+            # Note: Strict check might fail if enums are reloaded, use string check or loose comparison if needed
+            # But here we are in same process so it should match
+            if str(f.type) == str(FeatureType.UI_EXTENSION) or f.type == FeatureType.UI_EXTENSION:
+                
+                # Check Install State
+                if not self.is_feature_installed(f):
+                    continue
+                
+                # Check Metadata for Slot info
+                slot = f.meta.get('slot')
+                content = f.meta.get('content')
+                
+                if slot and content:
+                    self._registry.register_slot(slot, content)
+                    count += 1
+                else:
+                    # Some UI extensions might be legacy or just manual registration
+                    pass
+        
+        logger.info(f"FeatureManager: Registered {count} UI slots.")

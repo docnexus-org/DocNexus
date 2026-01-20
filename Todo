@@ -52,3 +52,14 @@ Missing Markdown Features (Audit & Roadmap):
 Bugs (To Fix in Next Release):
 -> Alignment and spacing issue is there when containing Inline Emojis (due to table wrapping logic).
 -> Emoji size in Block sections is appearing a bit strecheds.
+
+Universal Editor Makeover (Architecture Refactor):
+-> [Phase 1 - In Progress] Universal Architecture
+   - [x] Slot System: `EDITOR_CONTAINER` and `HEAD_SCRIPTS` slots in `view.html`.
+   - [x] API Update: Rename `get_markdown_files` -> `get_document_files`.
+   - [ ] PDF Plugin: Implement `pdf-lib` integration for basic viewing/stamping.
+-> [Phase 2] Enhanced Plugin UI
+   - [ ] Toolbar Slots: Allow plugins to inject buttons into the main header (Save/Cancel/Tools).
+   - [ ] Keyboard Shortcuts: Unified registry for plugin hotkeys.
+-> [Phase 3] Communication
+   - [ ] Event Bus: Global `DocNexus.emit('FILE_SAVED')` for cross-plugin communication.

@@ -1132,6 +1132,11 @@
     <script>
         const currentFilename = '{{ file.filename }}';
         const currentFilePath = '{{ file.get("relative_path", file.filename) }}';
+
+        // Expose to window for Plugins
+        window.currentFilename = currentFilename;
+        window.currentFilePath = currentFilePath;
+
         let editorInstance = null;
 
         // Highlight logic for view mode
