@@ -1263,19 +1263,64 @@
             const editorSection = document.getElementById('editor-section');
             const docContent = document.querySelector('.markdown-content');
             const docHeader = document.querySelector('.document-header');
-            const editBtn = document.querySelector('.edit-btn');
+            const editBtn = document.querySelector('.edit-btn'); // Note: This might be null if using the top-nav logic? Check dom.
 
             // Remove Editor Controls
             const controls = docHeader.querySelector('.edit-actions');
             if (controls) controls.remove();
 
-            // Show Content
-            // Show Content
-            editorSection.style.display = 'none';
-            document.getElementById('plugin-editor-container').style.display = 'none'; // Hide plugin container too
-            docContent.style.display = 'block';
+            // Check if we are in Plugin Mode (specifically PDF)
+            // Ideally we check activePlugin, but currentFilename is robust here too.
+            if (currentFilename.toLowerCase().endsWith('.pdf')) {
+                // For PDF, we DO NOT hide the plugin container.
+                // We just ensure the UI is reset to ReadOnly via hooks (which happened in toggleEdit? No, this is direct click).
+
+                // If the user clicked the direct "Cancel" button (which calls this function), 
+                // we need to trigger the plugin's onCancel/onView to be safe.
+                if (window.DocNexusPlugins && window.DocNexusPlugins.pdf && window.DocNexusPlugins.pdf.onCancel) {
+                    window.DocNexusPlugins.pdf.onCancel();
+                }
+
+                // Ensure Plugin Container is visible
+                const pluginContainer = document.getElementById('plugin-editor-container');
+                if (pluginContainer) pluginContainer.style.display = 'block';
+
+                // Ensure Markdown content is hidden
+                docContent.style.display = 'none';
+                editorSection.style.display = 'none';
+
+            } else {
+                // Standard Markdown Behavior
+                // Show Content
+                editorSection.style.display = 'none';
+                document.getElementById('plugin-editor-container').style.display = 'none';
+                docContent.style.display = 'block';
+            }
 
             // Show Edit Button
+            // If the Edit/Save/Cancel buttons are in the top-nav (id='edit-btn'), we need to toggle them.
+            // But the `toggleEdit` function handles the top-nav buttons. 
+            // The `cancelEdit` function seems to be used by the INJECTED buttons inside `.document-header` (from `toggleEditMode` - line 1206).
+            // Wait, there are TWO edit modes?
+            // 1. `toggleEdit()` (line ~1495) -> Uses top nav buttons.
+            // 2. `toggleEditMode()` (line 1206) -> Injects `.edit-actions` into `.document-header`.
+
+            // It seems the user might be using the buttons injected by `toggleEditMode`?
+            // "The commit current state..." snippet in previous turns showed `toggleEdit` modification.
+
+            // Let's assume we need to restart the specific `isEditing` state if it was used.
+            if (typeof isEditing !== 'undefined') isEditing = false;
+
+            // Reset Top Nav Buttons if they exist
+            const navEditBtn = document.getElementById('edit-btn');
+            const navSaveBtn = document.getElementById('save-btn');
+            const navCancelBtn = document.getElementById('cancel-btn');
+
+            if (navEditBtn) navEditBtn.style.display = 'inline-flex';
+            if (navSaveBtn) navSaveBtn.style.display = 'none';
+            if (navCancelBtn) navCancelBtn.style.display = 'none';
+
+            // Also show the old style edit button if it exists
             if (editBtn) editBtn.style.display = 'inline-flex';
         }
 
@@ -1318,7 +1363,35 @@
                 });
         }
 
-        function saveDocument() {
+        async function saveDocument() {
+            // Check for Plugin Delegation First
+            if (currentFilename.toLowerCase().endsWith('.pdf')) {
+                if (window.DocNexusPlugins && window.DocNexusPlugins.pdf && window.DocNexusPlugins.pdf.onSave) {
+                    // Show spinner on the specific button clicked if possible, 
+                    // but since we are in a global function, we target the generic class.
+                    const saveBtn = document.querySelector('.btn-save');
+                    const origText = saveBtn ? saveBtn.innerHTML : '';
+
+                    if (saveBtn) {
+                        saveBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Saving...';
+                        saveBtn.disabled = true;
+                    }
+
+                    try {
+                        await window.DocNexusPlugins.pdf.onSave();
+                        // Plugin handles its own success notification (Toast)
+                    } catch (e) {
+                        alert("Plugin Save Failed: " + e);
+                    } finally {
+                        if (saveBtn) {
+                            saveBtn.innerHTML = origText;
+                            saveBtn.disabled = false;
+                        }
+                    }
+                    return;
+                }
+            }
+
             if (!editorInstance) return;
             const content = editorInstance.getMarkdown();
 

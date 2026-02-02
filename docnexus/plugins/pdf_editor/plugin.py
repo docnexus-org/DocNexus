@@ -96,12 +96,24 @@ def get_features():
                         }
                         
                         // 3. Initialize Editor in Read-Only Mode
-                        const rawUrl = '/raw/' + filePath;
+                        const rawUrl = '/raw/' + (filePath.startsWith('/') ? filePath.slice(1) : filePath);
+                        
+                        console.log("PDF Plugin: Loading from", rawUrl);
                         
                         // Wait slightly for container layout to stabilize
                         setTimeout(() => {
-                            PDFEditor.init(true); // true = readOnly
-                            PDFEditor.load(rawUrl);
+                            try {
+                                if (typeof PDFEditor === 'undefined') {
+                                    console.error("PDFEditor object is undefined! Script syntax error?");
+                                    alert("PDF Plugin Error: PDFEditor not loaded.");
+                                    return;
+                                }
+                                PDFEditor.init(true); // true = readOnly
+                                PDFEditor.load(rawUrl);
+                            } catch (e) {
+                                console.error("PDF Plugin Init Error:", e);
+                                alert("PDF Init Error: " + e.message);
+                            }
                         }, 50);
                     }
                 });
@@ -305,6 +317,7 @@ window.DocNexusPlugins = window.DocNexusPlugins || {};
 
 const PDFEditor = {
     doc: null,
+    currentUrl: null, // Track URL for reloading
     pageNum: 1,
     pageRendering: false,
     pageNumPending: null,
@@ -340,16 +353,18 @@ const PDFEditor = {
         // Responsive Resize Listener
         window.addEventListener('resize', () => {
              if (this.fitMode === 'width') {
-                 // Debounce could be added here
-                 this.fitWidth(false); // Don't full re-render if just css scaling? For now, re-calc.
+                 this.fitWidth(false); 
              }
         });
         
         // Input Enter Keys
-        document.getElementById('pdf-page-input').addEventListener('keypress', (e) => {
+        const pgInput = document.getElementById('pdf-page-input');
+        if (pgInput) pgInput.addEventListener('keypress', (e) => {
             if(e.key === 'Enter') this.goToPage(e.target.value);
         });
-        document.getElementById('pdf-zoom-input').addEventListener('keypress', (e) => {
+        
+        const zmInput = document.getElementById('pdf-zoom-input');
+        if(zmInput) zmInput.addEventListener('keypress', (e) => {
             if(e.key === 'Enter') this.setZoom(e.target.value);
         });
     },
@@ -361,9 +376,8 @@ const PDFEditor = {
         
         if (isReadOnly) {
             if(toolsGroup) toolsGroup.style.display = 'none';
-            if(drawCanvas) drawCanvas.style.display = 'none'; // Disable interaction
+            if(drawCanvas) drawCanvas.style.display = 'none';
             this.currentTool = 'none';
-            // Also reset active button states
             document.querySelectorAll('.pdf-btn').forEach(b => b.classList.remove('active'));
         } else {
             if(toolsGroup) toolsGroup.style.display = 'flex';
@@ -373,11 +387,13 @@ const PDFEditor = {
 
     load: async function(url) {
         try {
+            this.currentUrl = url; // Save for reload
             const loadingTask = pdfjsLib.getDocument(url);
             this.doc = await loadingTask.promise;
             
             // Update Totals
-            document.getElementById('pdf-total-pages').textContent = this.doc.numPages;
+            const totalPg = document.getElementById('pdf-total-pages');
+            if(totalPg) totalPg.textContent = this.doc.numPages;
             
             // Auto Fit Width on Load
             await this.fitWidth();
@@ -396,7 +412,6 @@ const PDFEditor = {
         
         const container = document.getElementById('pdf-canvas-container');
         if (container) {
-            // Available width minus layout padding (32px * 2)
             const availableWidth = container.clientWidth - 70; 
             if (availableWidth > 0) {
                 this.scale = availableWidth / viewport.width;
@@ -425,7 +440,6 @@ const PDFEditor = {
         this.canvas.height = viewport.height;
         this.canvas.width = viewport.width;
         
-        // Sync Draw Canvas
         this.drawCanvas.height = viewport.height;
         this.drawCanvas.width = viewport.width;
 
@@ -496,7 +510,6 @@ const PDFEditor = {
     },
     
     setZoom: function(valStr) {
-        // Parse '100%' or '1.0'
         let val = parseFloat(valStr);
         if (valStr.includes('%')) val = val / 100;
         
@@ -516,24 +529,20 @@ const PDFEditor = {
         
         const zoomInput = document.getElementById('pdf-zoom-input');
         if (zoomInput && document.activeElement !== zoomInput) {
-            zoomInput.value = `${Math.round(this.scale * 100)}%`;
+            zoomInput.value = Math.round(this.scale * 100) + '%';
         }
     },
     
-    // Tools
     setTool: function(tool) {
         if (this.readOnly) return;
         
         this.currentTool = tool;
-        console.log("Tool selected:", tool);
         
-        // Update Buttons
         document.querySelectorAll('.pdf-btn').forEach(b => b.classList.remove('active'));
-        const btn = document.getElementById(`tool-${tool}`);
+        const btn = document.getElementById('tool-' + tool);
         if(btn) btn.classList.add('active');
     },
     
-    // Drawing Logic
     startDrawing: function(e) {
         if (this.currentTool !== 'draw' && this.currentTool !== 'eraser') return;
         this.isDrawing = true;
@@ -553,7 +562,7 @@ const PDFEditor = {
         
         if (this.currentTool === 'eraser') {
             this.drawCtx.globalCompositeOperation = 'destination-out';
-            this.drawCtx.lineWidth = 20; // Eraser size
+            this.drawCtx.lineWidth = 20;
         } else {
             this.drawCtx.globalCompositeOperation = 'source-over';
             this.drawCtx.strokeStyle = this.currentInkColor;
@@ -571,43 +580,37 @@ const PDFEditor = {
     
     stopDrawing: function() {
         this.isDrawing = false;
-        // Reset composite operation just in case
         this.drawCtx.globalCompositeOperation = 'source-over';
     },
 
     setInkColor: function(color) {
         this.currentInkColor = color;
-        // Update Preview
         const preview = document.getElementById('pdf-ink-preview');
         if (preview) preview.style.background = color;
         
-        // Auto-switch to draw tool if picking color
         if (this.currentTool !== 'draw') {
             this.setTool('draw');
         }
     },
     
-    // --- Save & Cancel Logic ---
-    
-    // Convert canvas drawings to PDF Annotations (Burn into PDF)
     save: async function() {
         if (!this.doc) return;
         
         try {
             console.log("PDF Editor: Saving...");
-            const existingPdfBytes = await fetch(this.doc.loadingTask.url).then(res => res.arrayBuffer());
+            
+            // Reconstruct URL reliably
+            const rawUrl = '/raw/' + (window.currentFilePath.startsWith('/') ? window.currentFilePath.slice(1) : window.currentFilePath);
+            
+            const response = await fetch(rawUrl);
+            
+            if (!response.ok) {
+                throw new Error('Failed to fetch original PDF: ' + response.status);
+            }
+            
+            const existingPdfBytes = await response.arrayBuffer();
             const pdfDoc = await PDFLib.PDFDocument.load(existingPdfBytes);
             const pages = pdfDoc.getPages();
-            
-            // For this version, we will only bake the current page's canvas
-            // Ideally, we should track strokes per page.
-            // Current limitation: Only saves edits on the *current* viewed page if we only have one canvas.
-            // BUT: The user request implies "save temporary changes".
-            // Since we don't have multi-page state persistence yet, we will assume single-page editing for now or
-            // we need to serialize the canvas to an image and draw it on the pdf page.
-            
-            // Optimization: If we have drawing data, bake it.
-            // Since `pdf-draw-canvas` is an overlay, we can export it to PNG and draw it on the PDF page.
             
             const currPage = pages[this.pageNum - 1]; // 0-indexed
             const { width, height } = currPage.getSize();
@@ -618,6 +621,7 @@ const PDFEditor = {
             });
             
             // Embed
+            console.log("PDF Editor: Embedding Image, Bytes:", pngImageBytes.byteLength);
             const pngImage = await pdfDoc.embedPng(pngImageBytes);
             
             // Draw
@@ -628,11 +632,9 @@ const PDFEditor = {
                 height: height,
             });
             
-            // Setup Save
             const pdfBytes = await pdfDoc.saveAsBase64({ dataUri: true });
             
-            // Send to Backend
-            const response = await fetch('/api/pdf/save', {
+            const saveResp = await fetch('/api/pdf/save', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
@@ -641,12 +643,17 @@ const PDFEditor = {
                 })
             });
             
-            const res = await response.json();
+            const res = await saveResp.json();
             if (res.success) {
                 console.log("PDF Saved Successfully");
                 // Reload to reflect "burned" changes and clear canvas
-                this.load(this.doc.loadingTask.url); 
-                // Clear drawing canvas manually just in case
+                if (this.currentUrl) {
+                    // Force cache bust
+                    const cleanUrl = this.currentUrl.split('?')[0];
+                    this.load(cleanUrl + '?t=' + Date.now());
+                } else {
+                    console.warn("No currentUrl found, skipping reload");
+                }
                 this.drawCtx.clearRect(0, 0, this.drawCanvas.width, this.drawCanvas.height);
                 return true;
             } else {
@@ -662,50 +669,26 @@ const PDFEditor = {
     },
     
     cancel: function() {
-        // Revert unsaved changes = Clear the drawing canvas
-        // The underlying PDF is untouched until saved.
         if (confirm("Are you sure you want to discard unsaved drawing changes?")) {
             this.drawCtx.clearRect(0, 0, this.drawCanvas.width, this.drawCanvas.height);
-            // Also exit read-only mode visually (hooks will be called by toggleEdit)
             this.setReadOnly(true);
         }
     },
     
     showNotification: function(message, type = 'success') {
-        // Simple Toast
         let toast = document.getElementById('pdf-toast');
         if (!toast) {
             toast = document.createElement('div');
             toast.id = 'pdf-toast';
-            toast.style.cssText = `
-                position: fixed;
-                bottom: 24px;
-                right: 24px;
-                background: ${type === 'success' ? '#10b981' : '#ef4444'};
-                color: white;
-                padding: 12px 24px;
-                border-radius: 8px;
-                box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1);
-                z-index: 10000;
-                font-weight: 500;
-                opacity: 0;
-                transition: opacity 0.3s ease;
-                display: flex;
-                align-items: center;
-                gap: 8px;
-            `;
+            toast.style.cssText = 'position: fixed; bottom: 24px; right: 24px; color: white; padding: 12px 24px; border-radius: 8px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1); z-index: 10000; font-weight: 500; opacity: 0; transition: opacity 0.3s ease; display: flex; align-items: center; gap: 8px;';
             document.body.appendChild(toast);
         }
         
-        // Update content
         const icon = type === 'success' ? '<i class="fas fa-check-circle"></i>' : '<i class="fas fa-exclamation-circle"></i>';
-        toast.innerHTML = `${icon} ${message}`;
+        toast.innerHTML = icon + ' ' + message;
         toast.style.background = type === 'success' ? '#10b981' : '#ef4444';
         
-        // Show
         requestAnimationFrame(() => toast.style.opacity = '1');
-        
-        // Hide
         setTimeout(() => {
             toast.style.opacity = '0';
         }, 3000);

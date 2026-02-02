@@ -1,5 +1,16 @@
 # Changelog
 
+## [1.2.7] - 2026-02-02
+### Fixed
+- **PDF Save Logic**: Resolved issue where edits were saved to a new file instead of overwriting the original by exposing `WORKSPACE_PATH` configuration to the plugin system.
+- **Cache Busting**: Fixed issue where saved annotations did not appear immediately by forcing a cache-busted reload of the PDF viewer.
+- **Save Reliability**: Fixed `Invalid parameter` error during save by tracking the correct document URL in the `PDFEditor` state.
+- **Blank Page**: Resolved syntax error (duplicate `try` block) in the PDF Editor initialization script.
+
+### Changed
+- **Build System**: Added robust retry logic to handle file locking during build cleanup.
+- **Plugin Architecture**: Exposed `app.config['WORKSPACE_PATH']` to allow plugins to resolve absolute file paths correctly.
+
 All notable changes to this project will be documented in this file.
 
 ## [v1.2.7] - Unreleased

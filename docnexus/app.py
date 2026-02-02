@@ -451,6 +451,7 @@ def save_config(config):
 # Load configuration
 CONFIG = load_config()
 MD_FOLDER = Path(CONFIG['active_workspace'])  # Folder containing documents
+app.config['WORKSPACE_PATH'] = str(MD_FOLDER) # Expose to plugins
 DOCS_FOLDER = PROJECT_ROOT / 'docs'  # Documentation folder
 ALLOWED_EXTENSIONS = {'.md', '.markdown', '.txt', '.docx', '.pdf'}
 
