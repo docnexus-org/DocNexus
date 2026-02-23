@@ -1,0 +1,51 @@
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script>pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';</script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js"></script>
+<script>
+    // PDF Viewer Logic (Universal IO)
+    document.addEventListener('DOMContentLoaded', function () {
+        const filePath = window.currentFilePath;
+
+        if (filePath && filePath.toLowerCase().endsWith('.pdf')) {
+            console.log("PDF Plugin: Initializing Unified Viewer");
+
+            // 1. Hide default Markdown content BUT keep Header
+            const mdContent = document.querySelector('.markdown-content');
+            if (mdContent) mdContent.style.display = 'none';
+
+            // Also hide TOC container if present (PDF handles its own TOC)
+            const tocContainer = document.querySelector('.toc-container');
+            if (tocContainer) tocContainer.style.display = 'none';
+
+            // 2. Show Plugin Container
+            const pluginContainer = document.getElementById('plugin-editor-container');
+            if (pluginContainer) {
+                pluginContainer.style.display = 'block';
+                // Ensure it respects Flexbox parent
+                pluginContainer.style.width = '100%';
+                pluginContainer.style.minWidth = '0';
+            }
+
+            // 3. Initialize Editor in Read-Only Mode
+            const rawUrl = '/raw/' + (filePath.startsWith('/') ? filePath.slice(1) : filePath);
+
+            console.log("PDF Plugin: Loading from", rawUrl);
+
+            // Wait slightly for container layout to stabilize
+            setTimeout(() => {
+                try {
+                    if (typeof PDFEditor === 'undefined') {
+                        console.error("PDFEditor object is undefined! Script syntax error?");
+                        alert("PDF Plugin Error: PDFEditor not loaded.");
+                        return;
+                    }
+                    PDFEditor.init(true); // true = readOnly
+                    PDFEditor.load(rawUrl);
+                } catch (e) {
+                    console.error("PDF Plugin Init Error:", e);
+                    alert("PDF Init Error: " + e.message);
+                }
+            }, 50);
+        }
+    });
+</script>

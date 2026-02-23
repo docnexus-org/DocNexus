@@ -1437,13 +1437,23 @@
 
         function exportToPDF() {
             if (currentFileType === 'pdf') {
-                // Direct Download for PDF -> PDF
+                const btn = document.getElementById('exportBtn');
+                const origText = btn.innerHTML;
+                btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
+
+                // Direct Download for PDF -> PDF with Cache Busting
                 const link = document.createElement('a');
-                link.href = `/raw/${currentFilePath}`;
+                // Append timestamp to force fresh download
+                link.href = `/raw/${currentFilePath}?t=${Date.now()}`;
                 link.download = currentFilename;
                 document.body.appendChild(link);
                 link.click();
                 document.body.removeChild(link);
+
+                // Restore button text immediately since download starts instantly
+                setTimeout(() => {
+                    btn.innerHTML = origText;
+                }, 500);
             } else {
                 performExport('/api/export/pdf', 'pdf');
             }
@@ -1451,8 +1461,32 @@
 
         function exportToWord() {
             if (currentFileType === 'pdf') {
-                alert('PDF to Word conversion is not yet installed.');
-                // Ideally trigger a plugin check or show a modal
+                const btn = document.getElementById('exportBtn');
+                const origText = btn.innerHTML;
+                btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
+
+                fetch('/api/export/pdf-to-docx', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ filePath: currentFilePath })
+                })
+                    .then(r => {
+                        if (r.ok) return r.blob();
+                        return r.json().then(d => { throw new Error(d.error || 'Conversion failed') });
+                    })
+                    .then(blob => {
+                        const link = document.createElement('a');
+                        link.href = window.URL.createObjectURL(blob);
+                        link.download = currentFilename.replace('.pdf', '.docx');
+                        link.click();
+                        btn.innerHTML = origText;
+                    })
+                    .catch(e => {
+                        console.error('PDF to Word Error:', e);
+                        alert('PDF to Word Error: ' + e.message);
+                        btn.innerHTML = origText;
+                    });
+
             } else {
                 performExport('/api/export/docx', 'docx');
             }
@@ -1851,6 +1885,13 @@
     <script src="{{ url_for('static', filename='js/plugin-loader.js') }}"></script>
 
     <script src="{{ url_for('static', filename='theme.js') }}"></script>
+    <script>
+        // Global State - Re-injected here to ensure it is available if missing above
+        // We use || to avoid overwriting if already defined
+        window.currentFilePath = window.currentFilePath || "{{ file.path|replace('\\', '/') }}";
+        window.currentFilename = window.currentFilename || "{{ file.filename }}";
+        window.currentFileType = "{{ file.type }}"; 
+    </script>
 </body>
 
 </html>

@@ -6,6 +6,7 @@ beautifulsoup4
 flask
 htmldocx
 markdown
+pdf2docx
 pymdown-extensions
 pymupdf
 python-docx

@@ -237,7 +237,7 @@ def build(build_type="Dev"):
     ]
     
     # Dynamic collection for complex packages
-    for pkg in ["xhtml2pdf", "reportlab", "html5lib", "lxml", "docx", "bs4", "htmldocx", "pymdownx", "markdown"]:
+    for pkg in ["xhtml2pdf", "reportlab", "html5lib", "lxml", "docx", "bs4", "htmldocx", "pymdownx", "markdown", "pdf2docx"]:
         hidden_imports.extend(get_hidden_imports_from_venv(pkg))
 
     for imp in hidden_imports:

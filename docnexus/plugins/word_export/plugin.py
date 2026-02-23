@@ -1,9 +1,11 @@
 import logging
 import io
 import shutil
+import os
 from pathlib import Path
 import re
 import urllib.parse
+from flask import request, jsonify, send_file, current_app, Blueprint
 
 # Note: Feature, FeatureType, FeatureState, PluginRegistry are INJECTED by the loader.
 # Do not import them directly to avoid split-brain issues.
@@ -60,6 +62,13 @@ except ImportError as e:
     WD_COLOR = None
     re = None
     _word_export_import_error = e
+
+# PDF Export Imports
+try:
+    from pdf2docx import Converter
+except ImportError as e:
+    Converter = None
+    _pdf_export_import_error = e
 
 class SafeHtmlToDocx(HtmlToDocx):
     """
@@ -164,8 +173,6 @@ def transform_html_for_word(soup: BeautifulSoup):
     Transforms HTML elements into Word-friendly structures.
     Modifies the soup in-place.
     """
-    # 1. Transform Tabs (.tabbed-set) -> Vertical Headings + Content
-    # Structure: .tabbed-set > input, label, .tabbed-content
     # 1. Transform Tabs (.tabbed-set) -> Vertical Headings + Content
     # Structure: .tabbed-set > input, label, .tabbed-content
     for tab_set in soup.find_all(class_='tabbed-set'):
@@ -273,7 +280,6 @@ def transform_html_for_word(soup: BeautifulSoup):
         
         # Move remaining content to TD
         # We need to copy children one by one to avoid issues while modifying the tree
-        # td.append(title_p) # This line is a duplicate from the snippet, removed.
             
         # Move content to cell
         content_div = soup.new_tag('div')
@@ -484,10 +490,6 @@ def transform_html_for_word(soup: BeautifulSoup):
                  # Should not happen with standard markdown
                  pass
 
-
-
-
-
 def export_to_word(html_content: str) -> bytes:
     """
     Exports HTML content to a Word (.docx) file byte stream.
@@ -510,7 +512,6 @@ def export_to_word(html_content: str) -> bytes:
         soup = BeautifulSoup(html_content, 'html.parser')
     
     # Cleaning (Scripts, Styles, Nav)
-    # Cleaning (Scripts, Styles, Nav)
     # CRITICAL: Do NOT delete math scripts yet, we need them for extraction!
     for tag in soup.find_all(['script', 'style', 'nav']):
         if tag.name == 'script' and tag.get('type') and 'math/tex' in tag.get('type'):
@@ -518,10 +519,8 @@ def export_to_word(html_content: str) -> bytes:
         tag.decompose()
         
     # LOGGING: Inspect HTML Structure entering Word Transform (CRITICAL DEBUG)
-    logger.info(f"WordExport: HTML Head Snippet: {soup.prettify()[:2000]}")
+    # logger.info(f"WordExport: HTML Head Snippet: {soup.prettify()[:2000]}")
     
-    # No more debug search
-            
     # Transform Complex HTML for Word Compatibility
     # (Tabs, Alerts, Details, Math, etc.)
     transform_html_for_word(soup)
@@ -577,7 +576,7 @@ def export_to_word(html_content: str) -> bytes:
                 
                 # 2. Logic
                 if is_alert:
-                    logger.info(f"WordExport: Skipping Global Style for Alert Table. Classes={class_list}")
+                    # logger.info(f"WordExport: Skipping Global Style for Alert Table. Classes={class_list}")
                     continue
                 
                 # Standard Table Styling
@@ -634,11 +633,6 @@ def export_to_word(html_content: str) -> bytes:
         container = soup_factory.new_tag('span')
         container['style'] = "font-family: 'Cambria Math', 'Times New Roman', serif;"
         
-        # 1. Simple Tokenizer: Split by _ and ^, keeping delimiters
-        # This is non-trivial regex. Let's do a simple recursive state machine or iterative parser.
-        # Actually, let's process simpler logic: 
-        # Identify chunks of text, ^{...} or ^char, _{...} or _char
-        
         cursor = 0
         n = len(tex_str)
         
@@ -663,9 +657,6 @@ def export_to_word(html_content: str) -> bytes:
                     content = tex_str[start_grp:cursor]
                     cursor += 1 # Skip closing }
                 elif cursor < n:
-                    # Single char argument
-                    # Warning: Macros like \alpha count as one char? 
-                    # For simplicity, extract just the next non-space char or macro
                     if tex_str[cursor] == '\\':
                          # Extract macro
                          macro_start = cursor
@@ -687,9 +678,6 @@ def export_to_word(html_content: str) -> bytes:
                     for child in list(nested_span.contents):
                         elem.append(child)
                 else:
-                    # Cleanup content (remove backslashes for simple display?)
-                    # Replace common greek? \alpha -> α
-                    # Keeping it simple: remove backslash if it looks like a macro
                     key = content.replace('\\', '').strip()
                     # Basic Mapper (could be expanded)
                     symbols = {
@@ -703,9 +691,6 @@ def export_to_word(html_content: str) -> bytes:
                 container.append(elem)
                 
             elif char == '{' or char == '}':
-                 # Just skip outer grouping braces in main flow if they appear (unlikely unless malformed)
-                 # But we might want to keep them if they are semantic sets?
-                 # Assume they are structural.
                  cursor += 1
             elif char == '\\':
                 # Handle text macros in main flow
@@ -743,9 +728,6 @@ def export_to_word(html_content: str) -> bytes:
         # 4. Transform Math (KaTeX/MathJax) -> Image (CodeCogs)
         # Target: .katex-mathml annotation[encoding="application/x-tex"] or <script type="math/tex">
         
-        # Imports needed locally for this logic if not present
-        # (re and urllib.parse are now imported globally)
-        
         # --- PRE-CLEANUP: Remove MathJax Previews ---
         # These often sit adjacent to the script tag and just clutter the DOM.
         for junk in soup.find_all(class_=['MathJax_Preview', 'katex-html']):
@@ -766,7 +748,7 @@ def export_to_word(html_content: str) -> bytes:
         
         processed_math_ids = set()
         
-        logger.info(f"WordExport: Found {len(specific_candidates)} specific math candidates (Scripts/KaTeX).")
+        # logger.info(f"WordExport: Found {len(specific_candidates)} specific math candidates (Scripts/KaTeX).")
         
         for i, target_node in enumerate(specific_candidates):
             if id(target_node) in processed_math_ids:
@@ -798,623 +780,255 @@ def export_to_word(html_content: str) -> bytes:
                 if is_display:
                     # BLOCK MATH: Use Image (CodeCogs) for full fidelity
                     base_url = "https://latex.codecogs.com/png.image"
-                    params = f"\\dpi{{300}} {tex}"
-                    safe_params = urllib.parse.quote(params)
-                    img_url = f"{base_url}?{safe_params}"
+                    # Add \displaystyle to ensure block rendering if not present
+                    if not tex.startswith(r'\displaystyle'):
+                        tex = r'\displaystyle ' + tex
+                        
+                    # Encoded params
+                    params = {
+                        'dpi': 300,
+                        'bg': 'white'
+                    }
+                    # CodeCogs expects strict URL encoding of the latex
+                    encoded_tex = urllib.parse.quote(tex)
+                    # Construct full URL manually: base + \dpi{300} + tex
+                    # CodeCogs Format: https://latex.codecogs.com/png.image?\dpi{300}\bg{white}formula
+                    full_url = f"{base_url}?\\dpi{{300}}{encoded_tex}"
                     
-                    img_tag = soup.new_tag('img')
-                    img_tag['src'] = img_url
-                    img_tag['alt'] = tex
-                    img_tag['class'] = 'docnexus-math-img' 
+                    # Create Image Tag
+                    img = soup.new_tag('img')
+                    img['src'] = full_url
+                    img['alt'] = tex
+                    img['class'] = 'math-block-image'
+                    img['style'] = "display: block; margin: 10px auto; max-width: 90%;"
                     
-                    div_wrapper = soup.new_tag('p')
-                    
-                    # ALIGNMENT FIX: Check if inside list
-                    is_inside_list = target_node.find_parent('li') is not None
-                    
-                    if is_inside_list:
-                         div_wrapper['style'] = "text-align: left; margin: 0;"
-                    else:
-                         div_wrapper['style'] = "text-align: center; margin: 12px 0;"
-                         
-                    img_tag['style'] = "max-width: 100%;"
-                    div_wrapper.append(img_tag)
-                    replacement = div_wrapper
+                    # Replace
+                    target_node.replace_with(img)
                 else:
-                    # INLINE MATH: Use Native Text + Sub/Sup for seamless flow
-                    # Call our helper
-                    replacement = parse_tex_to_html(soup, tex)
-                    # Add a class for potential styling?
-                    replacement['class'] = 'math-inline-text'
-                
-                target_node.replace_with(replacement)
-            else:
-                # If we targeted a specific node but found no TeX, decompose to be safe
-                 if target_node.name == 'script' or 'katex' in (target_node.get('class') or []):
-                    target_node.decompose()
+                    # INLINE MATH: Convert to Valid Word Text (Subscripts/Superscripts)
+                    # Using CodeCogs for inline images often creates alignment hell in Word.
+                    # We will try a text-based approximation buffer.
+                    
+                    # Parse TeX (Simple Superscript/Subscript)
+                    try:
+                        span = parse_tex_to_html(soup, tex)
+                        target_node.replace_with(span)
+                    except Exception as e:
+                        # Fallback
+                        fallback = soup.new_tag('span')
+                        fallback.string = f"[{tex}]"
+                        fallback['style'] = "color: #555; font-family: monospace;"
+                        target_node.replace_with(fallback)
 
-        # --- PASS 2: Generic Containers (.arithmatex) ---
-        # Only process these if they contain raw text fallback, NOT if they contain our images/text from Pass 1.
-        
-        generic_candidates = soup.find_all(class_='arithmatex')
-        logger.info(f"WordExport: Analyzing {len(generic_candidates)} generic .arithmatex containers.")
-        
-        for node in generic_candidates:
-            # 1. Cleanup: If it contains our processed items (img or math-inline-text), Unwrap wrapper.
-            if node.find('img', class_='docnexus-math-img') or node.find(class_='math-inline-text'):
-                node.unwrap()
-                continue
-                
-            # 2. Cleanup: If it contains residual scripts/katex that failed Pass 1, ignore (they should be gone).
-            
-            # 3. Text Extraction (Fallback for Generic Markdown)
-            # Example: <div class="arithmatex">\[ ... \]</div>
-            raw_text = node.get_text().strip()
-            tex = ""
-            is_display = False
-            
-            if raw_text.startswith('\\[') and raw_text.endswith('\\]'):
-                tex = raw_text[2:-2].strip()
-                is_display = True
-            elif raw_text.startswith('$$') and raw_text.endswith('$$'):
-                    tex = raw_text[2:-2].strip()
-                    is_display = True
-            elif raw_text.startswith('\\(') and raw_text.endswith('\\)'):
-                tex = raw_text[2:-2].strip()
-                is_display = False
-            elif raw_text.startswith('$') and raw_text.endswith('$'):
-                    tex = raw_text[1:-1].strip()
-                    is_display = False
-            
-            if tex and tex.strip():
-                 logger.info(f"WordExport: Extracted TeX from Generic Arithmatex: {tex[:20]}...")
-                 
-                 if is_display:
-                     base_url = "https://latex.codecogs.com/png.image"
-                     params = f"\\dpi{{300}} {tex}"
-                     safe_params = urllib.parse.quote(params)
-                     img_url = f"{base_url}?{safe_params}"
-                     
-                     img_tag = soup.new_tag('img')
-                     img_tag['src'] = img_url
-                     img_tag['alt'] = tex
-                     img_tag['class'] = 'docnexus-math-img'
-                     
-                     div_wrapper = soup.new_tag('p')
-                     
-                     # ALIGNMENT FIX: Check if inside list
-                     is_inside_list = node.find_parent('li') is not None
-                     
-                     if is_inside_list:
-                          div_wrapper['style'] = "text-align: left; margin: 0;"
-                     else:
-                          div_wrapper['style'] = "text-align: center; margin: 12px 0;"
-                          
-                     img_tag['style'] = "max-width: 100%;"
-                     div_wrapper.append(img_tag)
-                     replacement = div_wrapper
-                 else:
-                    # Inline Text Fallback
-                    replacement = parse_tex_to_html(soup, tex)
-                    replacement['class'] = 'math-inline-text'
-                 
-                 node.replace_with(replacement)
-            else:
-                 # It's an empty or garbage arithmatex container? 
-                 # If it doesn't contain an image or valid tex, it's just wrapper garbage.
-                 if not node.find('img'): # Double check
-                     node.unwrap() # Just remove the wrapper, keep content
-                     # Safest is unwrap.
-            
-        # Final Cleanup Pass
-        # We explicitly remove 'katex-mathml' here because we don't want htmldocx to render 
-        # the hidden accessible MathML text (which causes the 'n!k!...' garbage).
-        # We also treat the entire .arithmatex container as potential garbage if it wasn't replaced properly.
-        count_cleaned = 0
-        for junk in soup.find_all(class_=['MathJax_Preview', 'katex-html', 'katex-mathml']):
-            if junk.parent:
-                junk.decompose()
-                count_cleaned += 1
-        logger.info(f"WordExport: Final cleanup removed {count_cleaned} remaining garbage nodes.")
-        temp_dir_path = Path(temp_img_dir)
+        # --- PASS 2: Download Remote Images ---
+        # Iterate all images, download to temp dir, and point src to local file path
+        # HtmlToDocx needs local paths to embed correctly usually?
+        # No, HtmlToDocx handles URLs but fails if it can't fetch.
+        # We pre-fetch to ensure robustness and valid headers (User-Agent).
         
         for img in soup.find_all('img'):
             src = img.get('src')
-            if not src:
-                continue
-                
-            is_external = src.startswith(('http://', 'https://'))
-            new_src = None
+            if not src: continue
+            
+            # Skip valid local file paths (if any)
+            if os.path.exists(src): continue
+            
+            # Skip Base64
+            if src.startswith('data:'): continue
             
             try:
-                if is_external:
-                    # Check for SVG in URL before downloading to save time
-                    path_obj = Path(urlparse(src).path)
-                    if path_obj.suffix.lower() == '.svg':
-                         raise ValueError("SVG format is not supported by Word.")
-
-                    # Attempt to download external image using standard library
-                    req = urllib.request.Request(src, headers={'User-Agent': 'Mozilla/5.0'})
-                    with urllib.request.urlopen(req, timeout=3.0) as response:
-                        # Check Content-Type for SVG
-                        ctype = response.info().get_content_type().lower()
-                        if 'svg' in ctype:
-                             raise ValueError("SVG format is not supported by Word.")
-
-                        # Determine filename
-                        # CRITICAL FIX: CodeCogs URLs have identical paths (/png.image) but different queries.
-                        # We MUST hash the full URL to ensure unique filenames for different formulas.
-                        import hashlib
-                        url_hash = hashlib.md5(src.encode('utf-8')).hexdigest()[:10]
-                        original_name = path_obj.name or "image"
-                        # Append hash to filename to guarantee uniqueness
-                        filename = f"{path_obj.stem}_{url_hash}{path_obj.suffix or '.png'}"
-                        if filename.startswith('.'): filename = f"img_{url_hash}{filename}"
-                        local_path = temp_dir_path / filename
-                        
-                        with open(local_path, 'wb') as f:
-                            shutil.copyfileobj(response, f)
-                    
-                    new_src = str(local_path)
-                    
-                elif src.startswith('data:image/'):
-                    # Handle Data URIs (e.g. Mermaid Exports)
-                    import base64
-                    try:
-                        from PIL import Image
-                    except ImportError:
-                        Image = None
-                    
-                    if ';base64,' in src:
-                        header, data = src.split(';base64,')
-                        ctype = header.split(':')[1]
-                        
-                        if 'svg' in ctype:
-                             raise ValueError("SVG data URIs are not supported.")
-                        
-                        img_data = base64.b64decode(data)
-                        
-                        # Process Image (Flatten Transparency)
-                        if Image:
-                            try:
-                                with Image.open(io.BytesIO(img_data)) as im:
-                                   # Convert to RGBA if strictly RGB to ensure consistent handling (though usually PNG is RGBA)
-                                   if im.mode in ('RGBA', 'LA') or (im.mode == 'P' and 'transparency' in im.info):
-                                       # Create white background
-                                       bg = Image.new('RGB', im.size, (255, 255, 255))
-                                       # Paste image on top using alpha channel
-                                       if im.mode != 'RGBA':
-                                           im = im.convert('RGBA')
-                                       bg.paste(im, mask=im.split()[3]) # 3 is the alpha channel
-                                       
-                                        # Save flattened image
-                                       output = io.BytesIO()
-                                       bg.save(output, format='PNG')
-                                       img_data = output.getvalue()
-                                       ext = '.png'
-                                       
-                                       # MATH SCALING FIX:
-                                       # CodeCogs 300 DPI images are huge. We need to scale them down to match text size.
-                                       # 12pt text is ~16px. 300 DPI "x" might be 50px.
-                                       # Scale factor: 96 / 300 = 0.32. Let's try 0.3 to be safe.
-                                       if 'docnexus-math-img' in (img.get('class') or []):
-                                            current_w, current_h = im.size
-                                            scale_factor = 0.3
-                                            new_w = int(current_w * scale_factor)
-                                            new_h = int(current_h * scale_factor)
-                                            # Set attributes for htmldocx
-                                            img['width'] = new_w
-                                            img['height'] = new_h
-                                            # Update style to enforce it as well
-                                            base_style = "vertical-align: middle;"
-                                            if img.has_attr('style'):
-                                                 base_style = img['style'] + ";"
-                                            img['style'] = f"{base_style} width: {new_w}px; height: {new_h}px;"
-                                            
-                                   else:
-                                        ext = '.png' if 'png' in ctype else '.jpg'
-                            except Exception as iconv_err:
-                                logger.warning(f"PIL Conversion failed, using original data: {iconv_err}")
-                                ext = '.png' if 'png' in ctype else '.jpg'
-                        else:
-                            ext = '.png' if 'png' in ctype else '.jpg'
-
-                        filename = f"embedded_image_{hash(data)}{ext}"
-                        local_path = temp_dir_path / filename
-                        
-                        with open(local_path, 'wb') as f:
-                            f.write(img_data)
-                            
-                        # Update src used for Docx
-                        # Windows path separator fix? No, local_path is Path object.
-                        # htmldocx needs a string path.
-                        new_src = str(local_path)
-                    else:
-                        raise ValueError("Unsupported Data URI format")
-
-                elif not src.startswith('data:'):
-                     # Resolve local path
-                     # Try relative to CWD first
-                    potential_path = Path(src).resolve()
-                    if not potential_path.exists():
-                        # Try relative to server root if CWD failed
-                        potential_path = (Path(os.getcwd()) / src.lstrip('/\\')).resolve()
-                    
-                    if potential_path.exists():
-                        if potential_path.suffix.lower() == '.svg':
-                             raise ValueError("SVG format is not supported.")
-                        new_src = str(potential_path)
-                    else:
-                        logger.warning(f"Word Export: Local image not found: {src}")
-
-                # Update src if valid path found
-                if new_src:
-                    img['src'] = new_src
+                # Resolve relative URLS (assume against localhost:5000 if needed, or skip)
+                if src.startswith('/'):
+                    # Local server asset?
+                    # We can't easily fetch from "myself" inside the plugin without full URL.
+                    # Better to skip or assume it's reachable via http://localhost:PORT
+                    # For now, let's try to ignore relative unless we know the domain.
+                    pass
                 else:
-                    raise ValueError("Could not resolve image source.")
-
+                    # Remote URL (CodeCogs, etc.)
+                   # Generate Temp Filename
+                   parsed = urlparse(src)
+                   ext = os.path.splitext(parsed.path)[1]
+                   if not ext: ext = '.png'
+                   
+                   temp_filename = f"img_{hash(src)}{ext}"
+                   temp_path = os.path.join(temp_img_dir, temp_filename)
+                   
+                   # Download with requests
+                   headers = {'User-Agent': 'DocNexus/1.0'}
+                   import requests
+                   
+                   # Timeout to prevent hanging
+                   r = requests.get(src, headers=headers, timeout=5)
+                   if r.status_code == 200:
+                       with open(temp_path, 'wb') as f:
+                           f.write(r.content)
+                       
+                       # Update SRC to absolute local path
+                       img['src'] = temp_path
+                   else:
+                       logger.warning(f"Failed to download image: {src} (Status {r.status_code})")
             except Exception as e:
-                # logger.warning(f"Word Export: Skipping image '{src}': {e}")
-                # Fallback to alt text
-                # Fallback to alt text
-                alt_text = img.get('alt', '')
-                replacement = soup.new_tag('span')
-                # Remove brackets. If it's an emoji (detected by regex or length), we might want normal font.
-                # But for safety, keep the fallback text as is, just without brackets.
-                replacement.string = alt_text if alt_text else "Image"
+                logger.warning(f"Error pre-fetching image {src}: {e}")
                 
-                # If it looks like an emoji (short length), style it as emoji font
-                if len(alt_text) <= 2:
-                     replacement['style'] = "font-family: 'Segoe UI Emoji', sans-serif;"
-                else:
-                     replacement['style'] = "color: #666; font-style: italic; border: 1px solid #ccc; padding: 2px;"
-                
-                img.replace_with(replacement)
-
-        # Sanitize Styles to prevent htmldocx crashes (invalid literal for int() with base 16)
-        # htmldocx chokes on 'stroke: none', 'fill: ...', and 'color: auto/none' often found in Mermaid/Shims
-        for tag in soup.find_all(True):
-            if tag.has_attr('style'):
-                styles = [s.strip() for s in tag['style'].split(';') if s.strip()]
-                clean_styles = []
-                for s in styles:
-                    if ':' in s:
-                        prop, val = s.split(':', 1)
-                        prop = prop.strip().lower()
-                        val = val.strip().lower()
-                        
-                        # Strip dangerous SVG-related styles that htmldocx doesn't understand
-                        if prop in ['stroke', 'stroke-width', 'fill', 'fill-opacity', 'stroke-opacity']:
-                            continue
-                            
-                        # Strip unsupported values that cause htmldocx to crash (base 16 error)
-                        # This includes 'transparent', 'currentColor', 'var(...)', 'inherit', empty strings, and 'rgb/rgba'
-                        if any(x in val for x in ['transparent', 'currentcolor', 'var(', 'inherit', 'initial', 'unset', 'rgb', 'rgba']):
-                             continue
-                        
-                        if not val: # Empty value
-                             continue
-                             
-                        # Explicit check for keywords if they are the ONLY value (e.g. color: none)
-                        if val in ['none', 'auto']:
-                             continue
-                        
-                        # HEX Validation: If it looks like a hex color, it MUST be valid
-                        # htmldocx crashes on '#' or invalid hex with int('', 16)
-                        if '#' in val:
-                            # re is imported globally
-                            # Check if the value is purely a hex code (allow for !important suffix which we don't prefer but might exist)
-                            # We strip !important for the check
-                            clean_val = val.replace('!important', '').strip()
-                            if clean_val.startswith('#'):
-                                # It's a hex color. Validate it.
-                                if not re.match(r'^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$', clean_val):
-                                    # Invalid hex (e.g. '#', '#12', '#xyz')
-                                    continue
- 
-                        clean_styles.append(s)
-                
-                if clean_styles:
-                    tag['style'] = "; ".join(clean_styles)
-                else:
-                    del tag['style']
-                    
-        # Also remove 'stroke' and 'fill' attributes directly
-        for tag in soup.find_all(attrs={"stroke": True}):
-            del tag['stroke']
-        for tag in soup.find_all(attrs={"fill": True}):
-            del tag['fill']
-        for tag in soup.find_all(attrs={"viewbox": True}):
-             del tag['viewbox'] # Clean up any lingering SVG debris
-
-
-
-        clean_html = str(soup)
-
-        # Generate Word Doc
-        doc = Document()
+        # 5. Convert to Docx
+        docx_buffer = io.BytesIO()
+        document = Document()
         new_parser = SafeHtmlToDocx()
         
-        try:
-            # Now safe to convert
-            new_parser.add_html_to_document(clean_html, doc)
-            
-            # -------------------------------------------------------------------------
-            # POST-PROCESSING: Apply Fidelity Styling directly to DOCX objects
-            # This bypasses htmldocx limitations by acting on the final structure.
-            # -------------------------------------------------------------------------
-            
-            # 1. Apply Alert Backgrounds (Table Shading)
-            for table in doc.tables:
-                try:
-                    # heuristic: check first cell text for Alert Icons/Text
-                    # Use 'in' logic instead of 'startswith' to handle variability in Icon unicode (VS16 etc)
-                    if not table.rows or not table.columns: continue
-                    
-                    first_cell = table.cell(0, 0)
-                    text = first_cell.text.strip()
-                    
-                    bg_color = None
-                    if "Note" in text and ("ℹ" in text or "i" in text): # Handle ℹ️
-                        bg_color = "e6f6ff" 
-                    elif "Tip" in text and "💡" in text:
-                        bg_color = "dafbe1"
-                    elif "Important" in text and "📣" in text:
-                        bg_color = "f3e6ff"
-                    elif "Warning" in text and "⚠" in text: # Handle ⚠️ (U+26A0)
-                        bg_color = "fff8c5"
-                    elif ("Caution" in text or "Danger" in text) and ("🛑" in text or "⚡" in text):
-                         bg_color = "ffebe9"
-                         
-                    if bg_color:
-                        # Apply shading to the cell
-                        tcPr = first_cell._tc.get_or_add_tcPr()
-                        
-                        # Remove existing shd if any
-                        existing_shd = tcPr.find(qn('w:shd'))
-                        if existing_shd is not None:
-                            tcPr.remove(existing_shd)
-                            
-                        shd = OxmlElement('w:shd')
-                        shd.set(qn('w:val'), 'clear')
-                        shd.set(qn('w:fill'), bg_color)
-                        
-                        # Insert in correct schema order (after tcBorders, before noWrap/tcMar/vAlign etc)
-                        # Failure to respect this causes Word to ignore the shading silently.
-                        # Successors: noWrap, tcMar, textDirection, tcFitText, vAlign, hideMark
-                        successors = ['w:noWrap', 'w:tcMar', 'w:textDirection', 'w:tcFitText', 'w:vAlign', 'w:hideMark']
-                        target = None
-                        for s in successors:
-                            target = tcPr.find(qn(s))
-                            if target is not None:
-                                break
-                                
-                        if target is not None:
-                            tcPr.insert_element_before(shd, target.tag)
-                        else:
-                            tcPr.append(shd)
-                            
-                        # Fix Icon Font (Segoe UI Emoji)
-                        # Iterate runs in the first paragraph to find the icon
-                        if first_cell.paragraphs:
-                            for run in first_cell.paragraphs[0].runs:
-                                # Heuristic: If run contains the icon character
-                                if any(icon_char in run.text for icon_char in ["ℹ", "💡", "📣", "⚠️", "🛑", "⚡"]):
-                                    run.font.name = 'Segoe UI Emoji'
-                            
-                        # Also fix borders if needed? 
-                        # htmldocx usually handles borders if HTML had them.
-                        
-                except Exception as e:
-                    logger.warning(f"WordExport: Failed to style table: {e}")
-
-            # 2. Apply Math Styling (Paragraph Shading)
-            # We identified Math blocks as code blocks. 
-            # If they didn't get styled by add_styles_to_paragraph, we can catch them here.
-            # But add_styles_to_paragraph IS strictly supported by SafeHtmlToDocx if called correctly.
-            # We'll leave Math for now as the Post-Process Table fix is the big one.
-
-        except Exception as e:
-            import traceback
-            error_details = traceback.format_exc()
-
-            logger.error(f"HtmlToDocx conversion failed: {e}", exc_info=True)
-            doc.add_paragraph(f"[Export Error: Document content could not be fully converted.]")
-            doc.add_paragraph(f"Details: {str(e)}")
-            # Add traceback in small font for debugging
-            p = doc.add_paragraph()
-            run = p.add_run(error_details)
-            run.font.size = Pt(8)
-            run.font.color.rgb = RGBColor(128, 128, 128)
-
-        # Post-processing (Bookmarks)
-        heading_ids = {}
-        if main_content:
-            for heading in main_content.find_all(['h1', 'h2', 'h3', 'h4', 'h5', 'h6']):
-                 if heading.get('id'):
-                     heading_ids[heading.get_text(strip=True)] = heading.get('id')
+        # Capture generated content
+        clean_html_final = str(soup)
         
-        for paragraph in doc.paragraphs:
-            if paragraph.style.name.startswith('Heading') and paragraph.text.strip() in heading_ids:
-                add_bookmark(paragraph, heading_ids[paragraph.text.strip()])
-
-        # Post-processing (Hard Page Break Injection)
-        # Search for our unique marker and replace with a native WD_BREAK_PAGE
-        from docx.enum.text import WD_BREAK
+        # DEBUG: Save sanitized HTML to file for inspection
+        # with open("debug_export_sanitized.html", "w", encoding="utf-8") as f:
+        #    f.write(clean_html_final)
         
-        for i, p in enumerate(doc.paragraphs):
+        new_parser.add_html_to_document(clean_html_final, document)
+        
+        # 6. Post-Process Docx (Page Breaks)
+        # Iterate paragraphs and look for our marker
+        for p in document.paragraphs:
             if "<<<DOCNEXUS_PAGE_BREAK>>>" in p.text:
-                # Clear the marker text
-                p.clear()
-                # Insert the Page Break
+                # Clear text
+                p.text = ""
+                # Add run with break
                 run = p.add_run()
-                run.add_break(WD_BREAK.PAGE)
-                # Ensure no weird spacing/styles on this empty line
-                p.style = doc.styles['Normal']
-                continue
-
-            # Smart Page Breaks (Keep with Next & Keep Together)
-            # 1. Headings: Always keep with next paragraph
-            if p.style.name.startswith('Heading'):
-                p.paragraph_format.keep_with_next = True
-            
-            # 2. Code Blocks / Quotes: Try to keep them together on one page
-            # htmldocx maps <pre> to 'No Spacing' or paragraphs with specific fonts usually?
-            # It's inconsistent, but we can try to detect if it LOOKS like code (Courier New, Consolas, or shaded background)
-            # A safer generic heuristic: If it has a border or shading (which we applied to tables/code earlier?), keep it together.
-            # But paragraphs don't easily expose borders in python-docx API without diving into XML.
-            
-            # Simple fallback: If style involves 'Code', 'Quote', 'Intense Quote'
-            if any(s in p.style.name for s in ['Code', 'Quote', 'Macro']):
-                p.paragraph_format.keep_together = True
-
-        # Post-processing (Image Sizing & Centering)
-        # Fixes oversized diagrams in Word export
-        try:
-            # Calculate writable limits
-            section = doc.sections[0]
-            page_width = section.page_width
-            page_height = section.page_height
-            margin_x = section.left_margin + section.right_margin
-            margin_y = section.top_margin + section.bottom_margin
-            
-            writable_width = page_width - margin_x
-            writable_height = page_height - margin_y
-            
-            from docx.shared import Emu
-
-            for shape in doc.inline_shapes:
-                # Calculate aspect ratio
-                if shape.width == 0: continue
-                aspect_ratio = shape.height / shape.width
+                run.add_break() # Default is PAGE break
                 
-                # 1. Width Constraint
-                if shape.width > writable_width:
-                    shape.width = writable_width
-                    shape.height = int(writable_width * aspect_ratio)
-                
-                # 2. Height Constraint (Applied after width to ensure final fit)
-                if shape.height > writable_height:
-                    shape.height = writable_height
-                    shape.width = int(writable_height / aspect_ratio)
-                
-                # Force Center Alignment for paragraphs containing images
-                # This works because htmldocx usually puts block images in their own p (or we forced it)
-                # We check if the paragraph is mostly just this image to avoid centering mixed content
-                # For now, simplistic approach: if paragraph has an inline shape, center it.
-                # Accessing the parent paragraph of a shape isn't direct in python-docx public API,
-                # but we can try iterating paragraphs and finding runs with drawings.
-                pass 
-            
-            # Robust Centering Loop
-            # Iterate paragraphs, find those with images, force center
-            for p in doc.paragraphs:
-                # Check for blip/drawing
-                if 'Graphic' in p._element.xml or 'drawing' in p._element.xml:
-                    # Heuristic: mostly image content?
-                    if len(p.text.strip()) < 5:  # Almost no text, valid assumption for a diagram block
-                        p.alignment = WD_ALIGN_PARAGRAPH.CENTER
-                        
-        except Exception as e:
-            logger.warning(f"Failed to resize images: {e}")
-
-        # Post-processing (Style Table Grid)
-        for table in doc.tables:
-            # Skip Alerts (Heuristic)
-            if table.rows and table.columns:
-                 first_text = table.cell(0,0).text.strip()
-                 # Reuse the robust matching logic or just check for our specific markers
-                 if ("Note" in first_text and ("ℹ" in first_text or "i" in first_text)) or \
-                    ("Tip" in first_text and "💡" in first_text) or \
-                    ("Important" in first_text and "📣" in first_text) or \
-                    ("Warning" in first_text and "⚠" in first_text) or \
-                    (("Caution" in first_text or "Danger" in first_text) and ("🛑" in first_text or "⚡" in first_text)):
-                     continue
-
-            table.style = 'Table Grid'
-            if len(table.rows) > 0:
-                for cell in table.rows[0].cells:
-                    # Check if cell has explicit shading already (from our Alert logic or otherwise)
-                    # Use existing tcPr to check for w:shd
-                    tcPr = cell._element.get_or_add_tcPr()
-                    if tcPr.find(qn('w:shd')) is not None:
-                        continue
-                        
-                    shading_elm = OxmlElement('w:shd')
-                    shading_elm.set(qn('w:fill'), '6366f1')
-                    tcPr.append(shading_elm)
-
-        # Post-processing (Fix Internal Hyperlinks for TOC)
-        # htmldocx creates external links for #anchors. We need to convert them to w:anchor.
-        try:
-            part = doc.part
-            rels = part.rels
-            
-            # Iterate all paragraphs to find hyperlinks
-            for p in doc.paragraphs:
-                for child in p._element:
-                    if child.tag.endswith('hyperlink'):
-                        rid = child.get(qn('r:id'))
-                        if rid and rid in rels:
-                            rel = rels[rid]
-                            if rel.target_ref and rel.target_ref.startswith('#'):
-                                # Found internal link candidate
-                                anchor_name = rel.target_ref[1:] # strip #
-                                
-                                # Convert to internal anchor
-                                # Note: We assume the bookmark name matches the ID (which we ensured in our bookmarking logic? 
-                                # Actually our bookmark logic uses get_text()??
-                                # NO. 
-                                # Line 233: heading_ids[heading.get_text()] = heading.get('id')
-                                # Line 237: add_bookmark(..., heading_ids[...]) -> creates bookmark with NAME = ID.
-                                # So if href="#id", and bookmark name="id", it works.
-                                
-                                child.set(qn('w:anchor'), anchor_name)
-                                # Remove r:id (external reference)
-                                try:
-                                    del child.attrib[qn('r:id')]
-                                except:
-                                    pass
-                                child.set(qn('w:history'), '1')
-        except Exception as e:
-            logger.warning(f"Failed to fix internal hyperlinks: {e}")
-
-        # Save to Buffer
-        buffer = io.BytesIO()
-        doc.save(buffer)
-        buffer.seek(0)
+        document.save(docx_buffer)
+        docx_buffer.seek(0)
         
-    # Context exits, temp dir deleted.
-    # Context exits, temp dir deleted.
-    logger.info("WordExport: Complete. Returning bytes.")
-    return buffer.getvalue()
+        return docx_buffer.getvalue()
 
-# Expose features for FeatureManager
-def get_features():
-    # Helper to access injected classes safely
-    # If not injected (e.g. static analysis), these might fail, which is expected.
-    _Feature = globals().get('Feature')
-    _FeatureType = globals().get('FeatureType')
-    _FeatureState = globals().get('FeatureState')
+def export_pdf_to_docx(pdf_abs_path: str) -> bytes:
+    """
+    Converts a PDF file to DOCX using pdf2docx.
+    """
+    if Converter is None:
+        logger.error(f"Failed to import PDF conversion dependencies: {_pdf_export_import_error}")
+        raise RuntimeError("PDF to DOCX dependencies (pdf2docx) not installed. Please run `pip install pdf2docx`.")
+
+    if not os.path.exists(pdf_abs_path):
+        raise FileNotFoundError(f"PDF file not found: {pdf_abs_path}")
+
+    logger.info(f"PDFExport: Converting {pdf_abs_path} to DOCX...")
     
-    if not _Feature:
-        logger.error("Plugin dependency injection failed: Feature class missing.")
-        return []
+    # Use temp file for output
+    import tempfile
+    with tempfile.NamedTemporaryFile(suffix='.docx', delete=False) as tmp_docx:
+        temp_docx_path = tmp_docx.name
+    
+    try:
+        cv = Converter(pdf_abs_path)
+        cv.convert(temp_docx_path, start=0, end=None)
+        cv.close()
+        
+        with open(temp_docx_path, 'rb') as f:
+            docx_bytes = f.read()
+            
+        return docx_bytes
+    except Exception as e:
+        logger.error(f"PDF Conversion failed: {e}")
+        raise
+    finally:
+        # Cleanup
+        if os.path.exists(temp_docx_path):
+            try:
+                os.remove(temp_docx_path)
+            except: pass
 
+
+# -------------------------------------------------------------------------
+# Flask Blueprint Routes
+# -------------------------------------------------------------------------
+# Blueprint is created in __init__ usually, but here we can't assume structure.
+# We will check if `get_blueprint` is expected or we return a blueprint object.
+# Standard DocNexus plugins return a function `register_blueprint(app)`.
+# Or expect `plugin_bp` to be exposed.
+
+from flask import Blueprint
+
+blueprint = Blueprint('word_export', __name__)
+
+@blueprint.route('/api/export/docx', methods=['POST'])
+def export_docx_route():
+    try:
+        data = request.json
+        html_content = data.get('content')
+        filename = data.get('filename', 'document.docx')
+        
+        if not html_content:
+            return jsonify({'error': 'No content provided'}), 400
+            
+        docx_bytes = export_to_word(html_content)
+        
+        return send_file(
+            io.BytesIO(docx_bytes),
+            mimetype='application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+            as_attachment=True,
+            download_name=filename.replace('.md', '.docx').replace('.html', '.docx')
+        )
+    except Exception as e:
+        logger.error(f"Export failed: {traceback.format_exc()}")
+        return jsonify({'error': str(e)}), 500
+
+@blueprint.route('/api/export/pdf-to-docx', methods=['POST'])
+def export_pdf_to_docx_route():
+    try:
+        data = request.json
+        file_path_rel = data.get('filePath')
+        
+        if not file_path_rel:
+            return jsonify({'error': 'No file path provided'}), 400
+            
+        # Security: Resolve Path
+        workspace = current_app.config.get('WORKSPACE_PATH', '')
+        # Remove leading slash if present to join correctly
+        clean_rel = file_path_rel.lstrip('/\\')
+        abs_path = os.path.join(workspace, clean_rel)
+        
+        if not os.path.exists(abs_path):
+             return jsonify({'error': f'File not found: {file_path_rel}'}), 404
+             
+        docx_bytes = export_pdf_to_docx(abs_path)
+        
+        filename = os.path.basename(abs_path).replace('.pdf', '.docx')
+        
+        return send_file(
+            io.BytesIO(docx_bytes),
+            mimetype='application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+            as_attachment=True,
+            download_name=filename
+        )
+    except Exception as e:
+        logger.error(f"PDF to DOCX failed: {traceback.format_exc()}")
+        return jsonify({'error': str(e)}), 500
+
+import traceback
+
+# Plugin Entry Point
+# Note: Feature, FeatureType, FeatureState are injected into this module's globals by the loader.
+
+def get_features():
     return [
-        _Feature(
-            name="docx",
+        Feature(
+            name="Word Export",
             handler=export_to_word,
-            feature_type=_FeatureType.EXPORT_HANDLER,
-            state=_FeatureState.STANDARD
+            feature_type=FeatureType.EXPORT_HANDLER,
+            state=FeatureState.STANDARD,
+            meta={
+                "extension": "docx", # Standardize meta key for export handlers
+                "label": "Word Document (.docx)",
+                "content_type": "text/html" 
+            }
         )
     ]
 
-# Metadata
+
 PLUGIN_METADATA = {
     'name': 'Word Export',
-    'description': 'Exports documentation to Microsoft Word (.docx) with TOC and styles.',
+    'description': 'Converts documents and PDFs to professional Microsoft Word (.docx) format.',
     'category': 'export',
     'icon': 'fa-file-word',
-    'preinstalled': True
+    'preinstalled': True # Ensure it loads by default if possible, or matches user state
 }
