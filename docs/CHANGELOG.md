@@ -1,5 +1,15 @@
 # Changelog
 
+## [1.2.8] - 2026-02-24
+### Added
+- **API Dispatcher**: Implemented a new architectural pattern (`API_HANDLER`) to resolve Flask's dynamic blueprint registration limitations. Plugins can now expose backend APIs that are immediately functional upon installation without a server restart.
+- **Plugin Compliance**: Migrated all bundled plugins (`Editor`, `PDF Editor`, `PDF Export`, `Word Export`) to the new Dispatcher pattern.
+
+### Fixed
+- **Plugin Loading**: Resolved a critical naming inconsistency in `FeatureManager` (`_registry` vs `registry`) that prevented feature discovery.
+- **Startup Errors**: Fixed `NameError: CONFIG` and `NameError: FeatureType` in `app.py` by reordering initialization and ensuring imports are available in the dispatcher scope.
+- **PDF Viewer**: Fixed the "managed by extensions" placeholder and the persistent "Extension Required" modal by ensuring features hydrate correctly during hot-reloads.
+
 ## [1.2.7] - 2026-02-02
 ### Fixed
 - **PDF Save Logic**: Resolved issue where edits were saved to a new file instead of overwriting the original by exposing `WORKSPACE_PATH` configuration to the plugin system.

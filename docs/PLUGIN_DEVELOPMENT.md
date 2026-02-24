@@ -240,14 +240,17 @@ Handles conversion of document content.
 - **Handler Signature**: `def handler(content_html: str, output_path: str, meta: dict) -> bool`
 - **Meta Keys**: `extension`, `label`, `description`.
 
-### Flask Blueprint (API Extensions)
+### Flask Blueprint (Legacy / Static Plugins)
 Plugins can define a standard Flask Blueprint to expose custom API endpoints.
 - **Variable Name**: Define a `blueprint` variable at the module level in `plugin.py`.
-- **Loader Behavior**: The loader automatically detects this variable and registers it with the main Flask app.
-- **Best Practice**: Use a unique name for your blueprint to avoid collisions (e.g., `bp_myplugin`).
+- **Loader Behavior**: The loader automatically detects this variable and registers it.
+- **Limitation**: Due to Flask's architecture, blueprints registered *after* the first request (e.g., during dynamic marketplace installation) may not resolve correctly or require a server restart.
+
+> [!WARNING]
+> Only use this for pre-installed plugins that are guaranteed to load at boot. For dynamic plugins, use **Section 5.5: API Dispatcher** instead.
 
 ```python
-# plugin.py
+# plugin.py (Legacy Style)
 from flask import Blueprint, jsonify
 
 blueprint = Blueprint('my_plugin', __name__)
@@ -256,6 +259,63 @@ blueprint = Blueprint('my_plugin', __name__)
 def my_endpoint():
     return jsonify({'status': 'ok'})
 ```
+
+### 5.5 Dynamic API Dispatcher (Recommended)
+Introduced in v1.2.8, the **API Dispatcher** allows plugins to register routes as `Feature` objects. These are **Hot-Reloadable** and work immediately after installation without a restart.
+
+#### 1. Define the Handler
+Create a function in your `plugin.py` to handle the request. This should look like a standard Flask view function.
+
+```python
+# plugin.py (Modern Style)
+from flask import jsonify, request
+
+def my_api_handler():
+    # Regular Flask logic applies
+    data = request.json
+    return jsonify({"received": data, "status": "success"})
+```
+
+#### 2. Register as Feature
+In your `get_features()` function, return a `Feature` with `feature_type=FeatureType.API_HANDLER`.
+
+```python
+def get_features():
+    _Feature = globals().get('Feature')
+    _FeatureType = globals().get('FeatureType')
+    _FeatureState = globals().get('FeatureState')
+
+    return [
+        _Feature(
+            "my_plugin_api",
+            feature_type=_FeatureType.API_HANDLER,
+            handler=my_api_handler,
+            state=_FeatureState.STANDARD,
+            meta={
+                "plugin_id": "my_plugin",  # Must match your folder name
+                "api_path": "do-action"    # The URL path fragment
+            }
+        )
+    ]
+```
+
+#### 3. Calling from Frontend
+The dispatcher is accessible at `/api/plugins/call/<plugin_id>/<api_path>`.
+
+```javascript
+// From your plugin's JS
+fetch('/api/plugins/call/my_plugin/do-action', {
+    method: 'POST',
+    body: JSON.stringify({ key: 'value' })
+})
+.then(r => r.json())
+.then(data => console.log(data));
+```
+
+**Benefits:**
+- **Zero Restart**: Works immediately upon clicking "Install" in the marketplace.
+- **Uniform Security**: Routed through the core app, inheriting session and CSRF protections.
+- **Debuggable**: Core app logs all dispatch failures, making it easier to see if a handler is missing.
 
 ## 6. Building & Bundling
 

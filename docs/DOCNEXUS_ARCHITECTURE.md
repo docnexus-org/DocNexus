@@ -93,6 +93,7 @@ classDiagram
         ALGORITHM
         UI_EXTENSION
         EXPORT_HANDLER
+        API_HANDLER
     }
 
     FeatureManager --> PluginRegistry : Observes
@@ -246,9 +247,26 @@ sequenceDiagram
     Plugin->>Plugin: Generate Binary (xhtml2pdf / python-docx)
     Plugin-->>API: File Bytes
     API-->>Client: Download (Attachment)
+
+### D. API Dispatcher Flow (Dynamic Plugins)
+For plugins that provide backend APIs (like the Editor or PDF Editor), the Dispatcher ensures they are active immediately upon installation.
+
+```mermaid
+sequenceDiagram
+    participant Browser
+    participant App as app.py (Dispatcher)
+    participant FM as FeatureManager
+    participant Plugin as Plugin Handler
+
+    Browser->>App: GET/POST /api/plugins/call/editor/get-source
+    App->>FM: Find API_HANDLER(plugin_id='editor', api_path='get-source')
+    FM-->>App: Handler Function
+    App->>Plugin: Execute original blueprint logic...
+    Plugin-->>App: JSON / Bytes
+    App-->>Browser: Response
 ```
 
-### D. Extension Management Flow
+### E. Extension Management Flow
 User installs an extension via the Marketplace UI.
 
 ```mermaid
