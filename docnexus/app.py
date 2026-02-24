@@ -27,7 +27,7 @@ from bs4 import BeautifulSoup
 
 try:
     from docnexus.core.renderer import render_baseline, run_pipeline
-    from docnexus.features.registry import FeatureManager, Feature, FeatureState
+    from docnexus.features.registry import FeatureManager, Feature, FeatureState, FeatureType
     from docnexus.features import smart_convert as smart
     from docnexus.features.standard import normalize_headings, sanitize_attr_tokens, build_toc, annotate_blocks
 except Exception:
@@ -36,7 +36,7 @@ except Exception:
     if str(PROJECT_ROOT_FOR_PATH) not in sys.path:
         sys.path.insert(0, str(PROJECT_ROOT_FOR_PATH))
     from docnexus.core.renderer import render_baseline, run_pipeline
-    from docnexus.features.registry import FeatureManager, Feature, FeatureState
+    from docnexus.features.registry import FeatureManager, Feature, FeatureState, FeatureType
     from docnexus.features import smart_convert as smart
     from docnexus.features import smart_convert as smart
     from docnexus.features.standard import normalize_headings, sanitize_attr_tokens, build_toc, annotate_blocks
@@ -250,7 +250,11 @@ def install_plugin_api(plugin_id):
                         break
                 
                 if found_path:
-                    load_single_plugin(plugin_id, found_path, PluginRegistry())
+                    # Use global registry to avoid split-brain
+                    load_single_plugin(plugin_id, found_path, FEATURES.registry)
+                    # Register blueprints from the plugin onto the app
+                    FEATURES.registry.register_blueprints(app)
+                    
                     FEATURES.refresh()
                     # Re-hydrate UI slots (clears old, adds new)
                     FEATURES.register_ui_slots()
@@ -348,75 +352,6 @@ setup_logging(LOG_DIR, DEBUG_MODE)
 
 logger = logging.getLogger(__name__)
 logger = logging.getLogger(__name__)
-logger.info(f"Application starting - Version {VERSION} | Debug Mode: {DEBUG_MODE}")
-
-# Initialize Plugins
-try:
-    import time
-    logger.info(f"Initializing Plugin System... (Startup Time: {time.time()})")
-    
-    # Force loader logging to ensure we see plugin discovery
-    logging.getLogger('docnexus.core.loader').setLevel(logging.DEBUG)
-    
-    # Initialize Registry
-    registry = PluginRegistry()
-    logger.info(f"App sees PluginRegistry ID: {id(registry)}")
-    
-    # Load Plugins
-    from docnexus.core.loader import load_plugins
-    load_plugins(registry)
-    logger.info(f"App sees PluginRegistry ID: {id(registry)}")
-    registry.initialize_all()
-    
-    if hasattr(registry, 'register_blueprints'):
-        registry.register_blueprints(app)
-        
-        # Fallback: Explicitly register editor if missing (fixes loader discovery issues)
-        try:
-            from docnexus.plugins.editor.plugin import blueprint as editor_bp
-            if 'editor' not in [bp.name for bp in app.blueprints.values()]:
-                app.register_blueprint(editor_bp)
-                logger.info("Registered editor blueprint (fallback)")
-            else:
-                 logger.info("Editor blueprint already registered via registry.")
-        except Exception as e:
-            logger.warning(f"Fallback registration skipped: {e}")
-            
-    else:
-        logger.error("Registry missing register_blueprints method!")
-    
-    # Initialize FeatureManager and load plugins we just found
-    # global FEATURES  <-- Removed
-    try:
-        from docnexus.features.registry import FeatureManager
-        if FEATURES is None:
-            FEATURES = FeatureManager(registry)
-        
-        logger.info("Refreshing global FEATURES manager...")
-        FEATURES.refresh()
-        # Hydrate UI Slots (Strict Install Check)
-        FEATURES.register_ui_slots()
-    except Exception as fm_err:
-        logger.error(f"Failed to initialize FeatureManager: {fm_err}", exc_info=True)
-
-    logger.info(f"Registry initialized. Plugin count: {len(registry.get_all_plugins())}")
-    logger.debug(f"Registry contents: {registry.get_all_plugins()}")
-    
-    # DEBUG: Verify Registry Health
-    if hasattr(registry, 'get_slots'):
-        logger.info("Registry Health Check: get_slots() available")
-    else:
-        logger.error("Registry Health Check: get_slots() MISSING!")
-        
-except Exception as e:
-    logger.error(f"Plugin system initialization failed: {e}", exc_info=True)
-
-@app.errorhandler(500)
-def internal_error(error):
-    import traceback
-    logger.error(f"500 Error: {error}\n{traceback.format_exc()}")
-    return f"Internal Server Error: {error}<br><pre>{traceback.format_exc()}</pre>", 500
-
 # Workspace Configuration
 CONFIG_FILE = PROJECT_ROOT / 'config.json'
 
@@ -459,26 +394,95 @@ ALLOWED_EXTENSIONS = {'.md', '.markdown', '.txt', '.docx', '.pdf'}
 MAX_FILE_SIZE = 20 * 1024 * 1024  # 20 MB for actual file content
 MAX_EXPORT_HTML_SIZE = 50 * 1024 * 1024  # 50 MB for export HTML content
 
-# Feature registry: keep smart/experimental separate from baseline rendering
-FEATURES = FeatureManager()
-# STANDARD features (always run)
-FEATURES.register(Feature("STD_NORMALIZE", normalize_headings, FeatureState.STANDARD))
-FEATURES.register(Feature("STD_SANITIZE_ATTR", sanitize_attr_tokens, FeatureState.STANDARD))
-FEATURES.register(Feature("STD_TOC", build_toc, FeatureState.STANDARD))
-FEATURES.register(Feature("STD_ANNOTATE", annotate_blocks, FeatureState.STANDARD))
-# EXPERIMENTAL features (smart toggle) - Registered but disabled in v1.0.0
-# Will be re-enabled in v1.1/1.2 with proper UI - see doc/FUTURE_FEATURES.md
-FEATURES.register(Feature("SMART_TABLES", smart.convert_ascii_tables_to_markdown, FeatureState.EXPERIMENTAL))
-FEATURES.register(Feature("SMART_SIP", smart.convert_sip_signaling_to_mermaid, FeatureState.EXPERIMENTAL))
-FEATURES.register(Feature("SMART_TOPOLOGY", smart.convert_topology_to_mermaid, FeatureState.EXPERIMENTAL))
+# Initialize Plugins
+try:
+    import time
+    logger.info(f"Initializing Plugin System... (Startup Time: {time.time()})")
+    
+    # Force loader logging to ensure we see plugin discovery
+    logging.getLogger('docnexus.core.loader').setLevel(logging.DEBUG)
+    
+    # Initialize Registry
+    registry = PluginRegistry()
+    logger.info(f"App sees PluginRegistry ID: {id(registry)}")
+    
+    # Load Plugins
+    from docnexus.core.loader import load_plugins
+    load_plugins(registry)
+    logger.info(f"App sees PluginRegistry ID: {id(registry)}")
+    registry.initialize_all()
+    
+    if hasattr(registry, 'register_blueprints'):
+        registry.register_blueprints(app)
+        
+        # Fallback: Explicitly register editor if missing (fixes loader discovery issues)
+        try:
+            from docnexus.plugins.editor.plugin import blueprint as editor_bp
+            if 'editor' not in [bp.name for bp in app.blueprints.values()]:
+                app.register_blueprint(editor_bp)
+                logger.info("Registered editor blueprint (fallback)")
+            else:
+                 logger.info("Editor blueprint already registered via registry.")
+        except Exception as e:
+            logger.warning(f"Fallback registration skipped: {e}")
+            
+    else:
+        logger.error("Registry missing register_blueprints method!")
+    
+    # Initialize FeatureManager and load plugins we just found
+    # global FEATURES  <-- Removed
+    try:
+        from docnexus.features.registry import FeatureManager, Feature, FeatureState, FeatureType
+        from docnexus.features.standard import normalize_headings, sanitize_attr_tokens, build_toc, annotate_blocks
+        from docnexus.features import smart_convert as smart
 
-# Connect FeatureManager to Registry (Facade Pattern)
-# This allows FeatureManager to pull "Algorithm" features from plugins
-FEATURES._registry = PluginRegistry()
-# Force debug print to console
-logger.debug(f"DEBUG_STARTUP: Plugins in Registry: {FEATURES._registry.get_all_plugins()}")
-FEATURES.refresh(priority_list=CONFIG.get('plugin_priority', []))
-logger.debug(f"DEBUG_STARTUP: Features in Manager: {[f.name for f in FEATURES._features]}")
+        if FEATURES is None:
+            FEATURES = FeatureManager(registry)
+        else:
+            FEATURES.registry = registry
+            
+        # Register Core Features
+        FEATURES.register(Feature("STD_NORMALIZE", normalize_headings, FeatureState.STANDARD))
+        FEATURES.register(Feature("STD_SANITIZE_ATTR", sanitize_attr_tokens, FeatureState.STANDARD))
+        FEATURES.register(Feature("STD_TOC", build_toc, FeatureState.STANDARD))
+        FEATURES.register(Feature("STD_ANNOTATE", annotate_blocks, FeatureState.STANDARD))
+        
+        # Register Experimental/Smart Features
+        FEATURES.register(Feature("SMART_TABLES", smart.convert_ascii_tables_to_markdown, FeatureState.EXPERIMENTAL))
+        FEATURES.register(Feature("SMART_SIP", smart.convert_sip_signaling_to_mermaid, FeatureState.EXPERIMENTAL))
+        FEATURES.register(Feature("SMART_TOPOLOGY", smart.convert_topology_to_mermaid, FeatureState.EXPERIMENTAL))
+
+        logger.info("Refreshing global FEATURES manager...")
+        FEATURES.refresh(priority_list=CONFIG.get('plugin_priority', []))
+        # Hydrate UI Slots (Strict Install Check)
+        FEATURES.register_ui_slots()
+        
+        logger.info(f"Available features: {[f.name for f in FEATURES._features]}")
+    except Exception as fm_err:
+        logger.error(f"Failed to initialize FeatureManager: {fm_err}", exc_info=True)
+
+    logger.info(f"Registry initialized. Plugin count: {len(registry.get_all_plugins())}")
+    logger.debug(f"Registry contents: {registry.get_all_plugins()}")
+    
+    # DEBUG: Verify Registry Health
+    if hasattr(registry, 'get_slots'):
+        logger.info("Registry Health Check: get_slots() available")
+    else:
+        logger.error("Registry Health Check: get_slots() MISSING!")
+        
+except Exception as e:
+    logger.error(f"Plugin system initialization failed: {e}", exc_info=True)
+
+@app.errorhandler(500)
+def internal_error(error):
+    import traceback
+    logger.error(f"500 Error: {error}\n{traceback.format_exc()}")
+    return f"Internal Server Error: {error}<br><pre>{traceback.format_exc()}</pre>", 500
+
+
+
+
+# Context Processor for Debugging (moved here after all config is loaded)
 
 
 # Context Processor for Debugging (moved here after all config is loaded)
@@ -1814,7 +1818,40 @@ def browse_folder():
 # END NEW ROUTES
 # ============================================================================
 
-
+@app.route('/api/plugins/call/<plugin_id>/<path:api_path>', methods=['GET', 'POST'])
+def plugin_api_dispatcher(plugin_id, api_path):
+    """
+    Dynamic dispatcher for plugin-specific APIs (Alternative to Blueprints).
+    Usage: /api/plugins/call/pdf_export/raw-download
+    """
+    logger.debug(f"Dispatcher: Received call for {plugin_id} -> {api_path}")
+    
+    # Check if plugin is installed/enabled
+    from docnexus.core.state import PluginState
+    if not PluginState.get_instance().is_plugin_installed(plugin_id):
+        return jsonify({'error': f'Plugin {plugin_id} is disabled or uninstalled'}), 403
+        
+    # Find matching API_HANDLER feature
+    handler = None
+    for f in FEATURES._features:
+        if f.type == FeatureType.API_HANDLER:
+            f_plugin_id = f.meta.get('plugin_id')
+            f_api_path = f.meta.get('api_path')
+            
+            if f_plugin_id == plugin_id and f_api_path == api_path:
+                handler = f.handler
+                break
+                
+    if not handler:
+        logger.warning(f"Dispatcher: No API_HANDLER found for {plugin_id}/{api_path}")
+        return jsonify({'error': f'API path {api_path} not found for plugin {plugin_id}'}), 404
+        
+    try:
+        # Execute handler
+        return handler()
+    except Exception as e:
+        logger.error(f"Dispatcher: Handler for {plugin_id}/{api_path} failed: {e}", exc_info=True)
+        return jsonify({'error': str(e)}), 500
 
 @app.route('/extensions')
 def extensions_page():

@@ -101,6 +101,27 @@ def get_features():
             state=FeatureState.STANDARD,
             feature_type=FeatureType.UI_EXTENSION,
             meta={"source": "bundled"}
+        ),
+        # API Handlers (Dispatcher based)
+        Feature(
+            "editor_get_source",
+            feature_type=FeatureType.API_HANDLER,
+            handler=get_source,
+            state=FeatureState.STANDARD,
+            meta={
+                "api_path": "get-source",
+                "plugin_id": "editor"
+            }
+        ),
+        Feature(
+            "editor_save_document",
+            feature_type=FeatureType.API_HANDLER,
+            handler=save_document,
+            state=FeatureState.STANDARD,
+            meta={
+                "api_path": "save-document",
+                "plugin_id": "editor"
+            }
         )
     ]
 

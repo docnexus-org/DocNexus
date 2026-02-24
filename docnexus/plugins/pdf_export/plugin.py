@@ -4,7 +4,9 @@ import logging
 import traceback
 import re
 from pathlib import Path
+from docnexus.features.registry import Feature, FeatureType, FeatureState
 from bs4 import BeautifulSoup, Tag
+from flask import Blueprint, request, jsonify, send_file, current_app
 
 PLUGIN_DIR = Path(__file__).parent
 ENABLED_FILE = PLUGIN_DIR / "ENABLED"
@@ -16,6 +18,47 @@ import requests
 import base64
 
 logger = logging.getLogger(__name__)
+
+# --- BLUEPRINT & ROUTES (Moved up for load stability) ---
+blueprint = Blueprint('pdf_export_plugin', __name__)
+
+@blueprint.route('/api/pdf-export/raw-download', methods=['POST'])
+def export_pdf_to_pdf_route():
+    from docnexus.core.state import PluginState
+    if not PluginState.get_instance().is_plugin_installed('pdf_export'):
+        return jsonify({'error': 'Plugin disabled'}), 403
+
+    try:
+        data = request.json
+        file_path_rel = data.get('filePath')
+        
+        if not file_path_rel:
+            return jsonify({'error': 'No file path provided'}), 400
+            
+        # Security: Resolve Path
+        workspace = current_app.config.get('WORKSPACE_PATH', '')
+        # Remove leading slash if present to join correctly
+        clean_rel = file_path_rel.lstrip('/\\')
+        abs_path = os.path.join(workspace, clean_rel)
+        
+        if not os.path.exists(abs_path):
+             return jsonify({'error': f'File not found: {file_path_rel}'}), 404
+             
+        filename = os.path.basename(abs_path)
+        
+        # Read file as bytes
+        with open(abs_path, 'rb') as f:
+            pdf_bytes = f.read()
+            
+        return send_file(
+            io.BytesIO(pdf_bytes),
+            mimetype='application/pdf',
+            as_attachment=True,
+            download_name=filename
+        )
+    except Exception as e:
+        logger.error(f"PDF to PDF (Plugin) failed: {traceback.format_exc()}")
+        return jsonify({'error': str(e)}), 500
 
 # -------------------------------------------------------------------------
 # PDF Transformation Logic
@@ -1782,16 +1825,13 @@ def export_pdf(content_html: str) -> bytes:
         traceback.print_exc()
         raise RuntimeError(f"PDF Export Failed: {e}")
 
+# Plugin Entry Point
+# Note: Feature, FeatureType, FeatureState are injected into this module's globals by the loader.
+
 def get_features():
-    from docnexus.features.registry import Feature, FeatureType, FeatureState
-    from docnexus.core.state import PluginState
-    
-    # Check "Enabled" status via Config
-    is_enabled = "pdf_export" in PluginState.get_instance().get_installed_plugins()
-    
     features = []
     
-    # We register the feature but mark it as installed/not installed
+    # We register the feature. FeatureManager will handle "enabled" status via PluginState.
     features.append(
         Feature(
             "pdf_export",
@@ -1801,14 +1841,28 @@ def get_features():
             meta={
                 "extension": "pdf",
                 "label": "PDF Document (.pdf)",
-                "installed": is_enabled,
                 "description": "Generates professional PDF documents from your markdown.",
                 "version": "1.0.0"
             }
         )
     )
     
+    # API Handlers (Dispatcher based)
+    features.append(
+        Feature(
+            "pdf_raw_download",
+            feature_type=FeatureType.API_HANDLER,
+            handler=export_pdf_to_pdf_route,
+            state=FeatureState.STANDARD,
+            meta={
+                "api_path": "raw-download",
+                "plugin_id": "pdf_export"
+            }
+        )
+    )
+    
     return features
+
 
 
 PLUGIN_METADATA = {

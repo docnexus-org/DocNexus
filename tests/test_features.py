@@ -12,6 +12,25 @@ class TestFeatures(unittest.TestCase):
     def setUp(self):
         self.manager = FeatureManager()
 
+    def test_initialization_with_registry(self):
+        """Test that FeatureManager correctly sets _registry on init."""
+        mock_registry = MagicMock()
+        manager = FeatureManager(mock_registry)
+        self.assertEqual(manager._registry, mock_registry)
+        self.assertEqual(manager.registry, mock_registry)
+
+    def test_api_handler_feature(self):
+        """Test that API_HANDLER features can be registered and identified."""
+        from docnexus.features.registry import FeatureType
+        mock_handler = MagicMock()
+        feature = Feature("test_api", mock_handler, FeatureState.STANDARD, 
+                         feature_type=FeatureType.API_HANDLER,
+                         meta={"api_path": "test", "plugin_id": "p1"})
+        
+        self.assertEqual(feature.type, FeatureType.API_HANDLER)
+        self.assertEqual(feature.meta["api_path"], "test")
+        self.assertEqual(feature.handler, mock_handler)
+
     def test_pipeline_execution(self):
         """Test that a pipeline executes steps in order."""
         pipeline = Pipeline("TestPipeline")

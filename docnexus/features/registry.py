@@ -12,6 +12,7 @@ class FeatureType(Enum):
     ALGORITHM = auto() # Markdown processing, text transformation
     UI_EXTENSION = auto() # Legacy/Other
     EXPORT_HANDLER = auto()
+    API_HANDLER = auto()
 
 class Feature:
     def __init__(self, name: str, handler: Callable[[str], Any], state: FeatureState, feature_type: FeatureType = FeatureType.ALGORITHM, meta: Dict = None):
@@ -64,8 +65,6 @@ class PluginRegistry:
         if cls._instance is None:
             cls._instance = super(PluginRegistry, cls).__new__(cls)
             cls._instance._plugins = []
-            cls._instance = super(PluginRegistry, cls).__new__(cls)
-            cls._instance._plugins = []
             cls._instance._custom_slots = {}
             cls._instance._blueprints = []
         return cls._instance
@@ -111,6 +110,10 @@ class PluginRegistry:
     def register_blueprints(self, app):
         """Register all collected blueprints with the Flask app."""
         for bp in self._blueprints:
+            # Avoid duplicate registration
+            if bp.name in app.blueprints:
+                logger.debug(f"Blueprint {bp.name} already registered on app, skipping.")
+                continue
             try:
                 app.register_blueprint(bp)
                 logger.info(f"Registered blueprint: {bp.name}")
@@ -138,7 +141,15 @@ class FeatureManager:
     """
     def __init__(self, registry: Optional[Any] = None):
         self._features: List[Feature] = []
-        self._registry = registry
+        self._registry = registry  # Injected registry instance
+
+    @property
+    def registry(self):
+        return self._registry
+
+    @registry.setter
+    def registry(self, value):
+        self._registry = value
 
     def register(self, feature: Feature):
         """Register a feature manually (Core features)."""

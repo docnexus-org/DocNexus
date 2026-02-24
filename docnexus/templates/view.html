@@ -1327,7 +1327,7 @@
         function loadDocumentSource() {
             if (editorInstance) return; // Already loaded
 
-            fetch(`/api/get-source/${encodeURIComponent(currentFilePath)}`)
+            fetch(`/api/plugins/call/editor/get-source/${encodeURIComponent(currentFilePath)}`)
                 .then(r => r.json())
                 .then(data => {
                     if (data.error) {
@@ -1400,7 +1400,7 @@
             saveBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Saving...';
             saveBtn.disabled = true;
 
-            fetch('/api/save-document', {
+            fetch('/api/plugins/call/editor/save-document', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ filename: currentFilePath, content: content })
@@ -1436,24 +1436,43 @@
         // Settings and TOC are now handled by theme.js
 
         function exportToPDF() {
+            const btn = document.getElementById('exportBtn');
+            const origText = btn.innerHTML;
+            btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
+
             if (currentFileType === 'pdf') {
-                const btn = document.getElementById('exportBtn');
-                const origText = btn.innerHTML;
-                btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
-
-                // Direct Download for PDF -> PDF with Cache Busting
-                const link = document.createElement('a');
-                // Append timestamp to force fresh download
-                link.href = `/raw/${currentFilePath}?t=${Date.now()}`;
-                link.download = currentFilename;
-                document.body.appendChild(link);
-                link.click();
-                document.body.removeChild(link);
-
-                // Restore button text immediately since download starts instantly
-                setTimeout(() => {
-                    btn.innerHTML = origText;
-                }, 500);
+                // PDF -> PDF Download via Plugin Dispatcher
+                fetch('/api/plugins/call/pdf_export/raw-download', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ filePath: currentFilePath })
+                })
+                    .then(r => {
+                        if (r.ok) return r.blob();
+                        return r.json().then(d => { throw new Error(d.error || 'Download failed') });
+                    })
+                    .then(blob => {
+                        const link = document.createElement('a');
+                        link.href = window.URL.createObjectURL(blob);
+                        link.download = currentFilename;
+                        document.body.appendChild(link);
+                        link.click();
+                        btn.innerHTML = origText;
+                    })
+                    .catch(e => {
+                        console.error('PDF Export Error:', e);
+                        // Catch 404 (Blueprint missing) or the "unexpected token <" (JSON parse error on HTML response)
+                        if (e.message.includes('Plugin disabled') || e.message.includes('uninstalled') || e.message.includes('Unexpected token') || e.message.includes('404')) {
+                            if (typeof showPluginModal !== 'undefined') {
+                                showPluginModal('pdf');
+                            } else {
+                                alert('PDF Export Extension Required');
+                            }
+                        } else {
+                            alert('PDF Export Error: ' + e.message);
+                        }
+                        btn.innerHTML = origText;
+                    });
             } else {
                 performExport('/api/export/pdf', 'pdf');
             }
@@ -1465,7 +1484,7 @@
                 const origText = btn.innerHTML;
                 btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
 
-                fetch('/api/export/pdf-to-docx', {
+                fetch('/api/plugins/call/word_export/pdf-to-docx', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ filePath: currentFilePath })
@@ -1483,7 +1502,11 @@
                     })
                     .catch(e => {
                         console.error('PDF to Word Error:', e);
-                        alert('PDF to Word Error: ' + e.message);
+                        if (e.message.includes('Plugin disabled') || e.message.includes('uninstalled') || e.message.includes('not installed')) {
+                            showPluginModal('docx');
+                        } else {
+                            alert('PDF to Word Error: ' + e.message);
+                        }
                         btn.innerHTML = origText;
                     });
 

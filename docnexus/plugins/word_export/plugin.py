@@ -952,6 +952,11 @@ blueprint = Blueprint('word_export', __name__)
 
 @blueprint.route('/api/export/docx', methods=['POST'])
 def export_docx_route():
+    # Strict Operational Check
+    from docnexus.core.state import PluginState
+    if not PluginState.get_instance().is_plugin_installed('word_export'):
+        return jsonify({'error': 'Plugin disabled', 'code': 'PLUGIN_DISABLED'}), 403
+
     try:
         data = request.json
         html_content = data.get('content')
@@ -974,6 +979,11 @@ def export_docx_route():
 
 @blueprint.route('/api/export/pdf-to-docx', methods=['POST'])
 def export_pdf_to_docx_route():
+    # Strict Operational Check
+    from docnexus.core.state import PluginState
+    if not PluginState.get_instance().is_plugin_installed('word_export'):
+        return jsonify({'error': 'Plugin disabled', 'code': 'PLUGIN_DISABLED'}), 403
+
     try:
         data = request.json
         file_path_rel = data.get('filePath')
@@ -1020,6 +1030,17 @@ def get_features():
                 "extension": "docx", # Standardize meta key for export handlers
                 "label": "Word Document (.docx)",
                 "content_type": "text/html" 
+            }
+        ),
+        # API Handlers (Dispatcher based)
+        Feature(
+            "docx_pdf_convert",
+            feature_type=FeatureType.API_HANDLER,
+            handler=export_pdf_to_docx_route,
+            state=FeatureState.STANDARD,
+            meta={
+                "api_path": "pdf-to-docx",
+                "plugin_id": "word_export"
             }
         )
     ]

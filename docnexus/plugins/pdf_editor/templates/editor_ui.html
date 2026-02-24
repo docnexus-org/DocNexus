@@ -289,7 +289,11 @@
 
             } catch (e) {
                 console.error("PDF Load Error:", e);
-                alert("Failed to load PDF: " + e.message);
+                if (window.showPluginModal) {
+                    window.showPluginModal('pdf');
+                } else {
+                    alert("Failed to load PDF: " + e.message);
+                }
             }
         },
 
@@ -523,7 +527,7 @@
 
                 const pdfBytes = await pdfDoc.saveAsBase64({ dataUri: true });
 
-                const saveResp = await fetch('/api/pdf/save', {
+                const saveResp = await fetch('/api/plugins/call/pdf_editor/save', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({

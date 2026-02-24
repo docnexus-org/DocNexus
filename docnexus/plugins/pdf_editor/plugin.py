@@ -8,6 +8,11 @@ blueprint = pdf_bp
 
 @pdf_bp.route('/api/pdf/save', methods=['POST'])
 def save_pdf():
+    # Strict Operational Check
+    from docnexus.core.state import PluginState
+    if not PluginState.get_instance().is_plugin_installed('pdf_editor'):
+        return jsonify({'success': False, 'error': 'Plugin disabled'}), 403
+
     try:
         data = request.json
         file_path = data.get('filePath')
@@ -90,6 +95,17 @@ def get_features():
             meta={
                 "slot": "EDITOR_CONTAINER",
                 "content": load_resource('editor_ui.html')
+            }
+        ),
+        # API Handlers (Dispatcher based)
+        Feature(
+            "pdf_editor_save",
+            feature_type=FeatureType.API_HANDLER,
+            handler=save_pdf,
+            state=FeatureState.STANDARD,
+            meta={
+                "api_path": "save",
+                "plugin_id": "pdf_editor"
             }
         )
     ]
