@@ -1042,6 +1042,16 @@ def get_features():
                 "api_path": "pdf-to-docx",
                 "plugin_id": "word_export"
             }
+        ),
+        Feature(
+            "docx_export",
+            feature_type=FeatureType.API_HANDLER,
+            handler=export_docx_route,
+            state=FeatureState.STANDARD,
+            meta={
+                "api_path": "docx",
+                "plugin_id": "word_export"
+            }
         )
     ]
 
