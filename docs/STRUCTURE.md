@@ -121,6 +121,6 @@ This project follows Python packaging best practices:
 
 ---
 
-**Last Updated:** January 04, 2026  
-**Version:** 1.2.4  
+**Last Updated:** February 24, 2026  
+**Version:** 1.2.8  
 **Structure:** Hybrid (Flask App + PyInstaller Build)

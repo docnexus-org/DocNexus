@@ -7,7 +7,7 @@ Welcome to the DocNexus Plugin Ecosystem! This guide provides a comprehensive ov
 DocNexus uses a **Passive Plugin Architecture**. This means your plugin should ideally **NOT** import any code from the `docnexus` package directly if possible. Instead, the Core application **injects** the necessary classes and API handles into your plugin at runtime.
 
 **Why?**
-- **Stability**: Prevents "Split-Brain" issues where your plugin uses a different version of a class than the Core.
+- **Stability**: Prevents "Split-Brain" issues where your plugin uses a different version of a class than the Core. Features use **Duck-Typing** for registration, ensuring survivability during hot-reloads.
 - **Portability**: Your plugin works on any version of DocNexus that supports the API protocol.
 - **Sandboxing**: Errors in your plugin are less likely to crash the whole application.
 
@@ -341,6 +341,16 @@ If you set `preinstalled=False` (recommended for marketplace extensions), you **
    ```
 4.  Restart the app.
 
+
+### 6.6 Plugin Priority (Conflict Resolution)
+Multiple plugins can register the same `ALGORITHM` or `EXPORT_HANDLER`. To control which one takes precedence, use `config.json` in the project root:
+
+```json
+{
+    "plugin_priority": ["my_premium_plugin", "editor"]
+}
+```
+Plugins listed in `plugin_priority` are loaded **last**, meaning their features will overwrite any existing features with the same name in the `FeatureManager`.
 
 ```python
 # scripts/build.py
